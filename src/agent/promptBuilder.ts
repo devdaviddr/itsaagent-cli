@@ -54,6 +54,8 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `6. After making changes, verify them with a follow-up command`,
     `7. Use relative paths unless an absolute path is required`,
     `8. Never repeat the same tool call with the same arguments`,
+    `9. Before reading a file of unknown size, run \`wc -l <path>\` first. If it exceeds 300 lines, use read_file with start_line and end_line (1-indexed, inclusive) to read only the relevant section`,
+    `10. If the same approach fails twice, STOP and state explicitly: (a) why the previous attempts failed, and (b) what is fundamentally different about your next approach. Do not retry with minor variations`,
   ].join("\n");
 
   return agentSuffix ? `${base}\n\n${agentSuffix}` : base;
