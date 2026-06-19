@@ -15,8 +15,8 @@ export function registerAgentsCommand(program: Command): void {
   program
     .command("agents")
     .description("List available agents and their tool access")
-    .action(() => {
-      const registry = new AgentRegistry();
+    .action(async () => {
+      const registry = await AgentRegistry.create();
       const registered = getDefaultTools().map((t) => t.definition.name);
 
       console.log(chalk.bold("\nAvailable agents:\n"));

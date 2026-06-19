@@ -44,11 +44,11 @@ export async function saveConfig(config: CliConfig): Promise<void> {
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
 }
 
-export function toAgentConfig(
+export async function toAgentConfig(
   conf: CliConfig,
   opts: { verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number; agent?: string },
-): AgentConfig {
-  const registry = new AgentRegistry();
+): Promise<AgentConfig> {
+  const registry = await AgentRegistry.create();
   const agentId = opts.agent ?? DEFAULT_AGENT_ID;
   const agent = registry.get(agentId);
   if (!agent) {

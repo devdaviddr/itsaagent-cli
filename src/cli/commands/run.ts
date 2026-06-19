@@ -37,7 +37,7 @@ export function registerRunCommand(program: Command): void {
 
       let agentConfig;
       try {
-        agentConfig = toAgentConfig(conf, opts);
+        agentConfig = await toAgentConfig(conf, opts);
       } catch (err) {
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));
         process.exit(1);

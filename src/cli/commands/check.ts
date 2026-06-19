@@ -10,7 +10,7 @@ export function registerCheckCommand(program: Command): void {
     .action(async () => {
       const conf = await loadConfig();
       const opts = program.optsWithGlobals<{ model?: string; host?: string }>();
-      const agentConfig = toAgentConfig(conf, opts);
+      const agentConfig = await toAgentConfig(conf, opts);
       const runtime = new AgentRuntime(agentConfig);
 
       console.error(chalk.bold("ItsAAgent — Health Check\n"));

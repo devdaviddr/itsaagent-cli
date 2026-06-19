@@ -12,7 +12,7 @@ export function registerModelsCommand(program: Command): void {
     .action(async (cmdOpts: { select?: boolean }) => {
       const conf = await loadConfig();
       const opts = program.optsWithGlobals<{ model?: string; host?: string }>();
-      const runtime = new AgentRuntime(toAgentConfig(conf, opts));
+      const runtime = new AgentRuntime(await toAgentConfig(conf, opts));
 
       const { ok, models } = await runtime.checkProvider();
       if (!ok) { console.error(chalk.red("Cannot reach provider")); process.exit(1); }

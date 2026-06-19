@@ -1,4 +1,5 @@
 import { BUILTIN_AGENTS, type AgentDefinition } from "./AgentDefinition.js";
+import { loadUserAgents } from "./AgentLoader.js";
 
 /**
  * Holds the set of available agents. In v0.2.0 this is the three built-ins;
@@ -31,5 +32,19 @@ export class AgentRegistry {
   /** Register or replace an agent. Used by the user-agent loader (A-02). */
   add(def: AgentDefinition): void {
     this.agents.set(def.id, def);
+  }
+
+  /** Built-in IDs are reserved and must not be overwritten by user agents. */
+  isBuiltin(id: string): boolean {
+    return BUILTIN_AGENTS.some((a) => a.id === id);
+  }
+
+  /** Create a registry of built-in plus user-defined agents. */
+  static async create(): Promise<AgentRegistry> {
+    const registry = new AgentRegistry();
+    for (const agent of await loadUserAgents()) {
+      if (!registry.isBuiltin(agent.id)) registry.add(agent);
+    }
+    return registry;
   }
 }

@@ -37,19 +37,19 @@ describe("AgentRegistry", () => {
     expect(registry.list().map((a) => a.id)).toEqual(["build", "plan", "cli"]);
   });
 
-  it("default agent is build", () => {
-    const conf = toAgentConfig(defaultConfig(), {});
+  it("default agent is build", async () => {
+    const conf = await toAgentConfig(defaultConfig(), {});
     expect(conf.agent?.id).toBe(DEFAULT_AGENT_ID);
     expect(conf.agent?.id).toBe("build");
   });
 
-  it("--agent plan and --agent cli resolve correctly", () => {
-    expect(toAgentConfig(defaultConfig(), { agent: "plan" }).agent?.id).toBe("plan");
-    expect(toAgentConfig(defaultConfig(), { agent: "cli" }).agent?.id).toBe("cli");
+  it("--agent plan and --agent cli resolve correctly", async () => {
+    expect((await toAgentConfig(defaultConfig(), { agent: "plan" })).agent?.id).toBe("plan");
+    expect((await toAgentConfig(defaultConfig(), { agent: "cli" })).agent?.id).toBe("cli");
   });
 
-  it("throws on unknown agent id", () => {
-    expect(() => toAgentConfig(defaultConfig(), { agent: "nope" })).toThrow(/Unknown agent/);
+  it("rejects an unknown agent id", async () => {
+    await expect(toAgentConfig(defaultConfig(), { agent: "nope" })).rejects.toThrow(/Unknown agent/);
   });
 });
 
