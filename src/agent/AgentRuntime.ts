@@ -22,6 +22,7 @@ export interface AgentRuntimeEvents {
   error: [payload: { error: AgentError; stepIndex?: number }];
   "context:evict": [payload: { evicted: number; ratio: number }];
   "context:usage": [payload: { used: number; max: number; ratio: number }];
+  cancelled: [payload: { stepIndex?: number }];
 }
 
 function formatToolResult(tool: string, args: Record<string, unknown>, result: ToolResult): string {
@@ -43,6 +44,10 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private agent?: AgentDefinition;
   /** Cached native-tool-use capability of the active model (detected once per model). */
   private toolUseMode: boolean | undefined;
+  /** True while a run/continueChat loop is in flight; gates cancel(). */
+  private running = false;
+  /** Set by cancel() to stop the loop cooperatively at the next checkpoint. */
+  private cancelled = false;
 
   constructor(config: AgentConfig) {
     super();
@@ -79,6 +84,21 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   /** Switch the active agent. Re-scopes permitted tools; the next initSession() rebuilds the prompt. */
   setAgent(def: AgentDefinition): void {
     this.agent = def;
+  }
+
+  /**
+   * Cooperatively cancel an in-flight run/continueChat. The loop stops at its
+   * next checkpoint and resolves with a cancelled outcome (emitting "cancelled").
+   * A no-op when idle, and idempotent during a run.
+   */
+  cancel(): void {
+    if (this.running) this.cancelled = true;
+  }
+
+  /** Emit the cancelled outcome and return the sentinel the loop resolves with. */
+  private finishCancelled(stepIndex?: number): string {
+    this.emit("cancelled", { stepIndex });
+    return "[cancelled]";
   }
 
   /** Switch the model. Recreates the provider; tool-use capability is re-detected on the next run. */
@@ -177,6 +197,16 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   }
 
   private async runLoop(startTime: number): Promise<string> {
+    this.running = true;
+    this.cancelled = false;
+    try {
+      return await this.runLoopInner(startTime);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runLoopInner(startTime: number): Promise<string> {
     const callCounts = new Map<string, number>();
     const recencyWindow: string[] = []; // last N tool names
     const failureCounts = new Map<string, number>(); // consecutive failures per tool
@@ -185,15 +215,18 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const toolSpecs = useTools ? this.toolSpecs() : undefined;
 
     for (let step = 1; step <= this.config.maxSteps; step++) {
+      if (this.cancelled) return this.finishCancelled(step);
       this.emit("step", { index: step, total: this.config.maxSteps });
 
       let raw = "";
       let nativeCalls: ToolCall[] | undefined;
       for await (const chunk of this.provider.stream(this.ctx.forProvider(), toolSpecs)) {
+        if (this.cancelled) break;
         raw += chunk.delta;
         if (chunk.delta) this.emit("chunk", { delta: chunk.delta, stepIndex: step });
         if (chunk.toolCalls && chunk.toolCalls.length > 0) nativeCalls = chunk.toolCalls;
       }
+      if (this.cancelled) return this.finishCancelled(step);
 
       // Native tool-use: structure comes from the API, so parseResponse is skipped.
       // When there are no structured tool_calls (even a tool-capable model may emit

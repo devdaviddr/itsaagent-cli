@@ -52,6 +52,10 @@ export function useAgentEvents(
       dispatch({ type: "error", text: error.message });
       handlers.onIdle();
     });
+    on("cancelled", () => {
+      dispatch({ type: "notice", text: "Cancelled." });
+      handlers.onIdle();
+    });
 
     return () => {
       for (const [event, fn] of subs) runtime.off(event as never, fn as never);
