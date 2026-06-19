@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.0] — 2026-06-20
+
+### Breaking
+- (CLI-01) CLI binary renamed from `ai` to `iaa`. Run `npm install -g .` to update. All subcommands (`iaa run`, `iaa chat`, `iaa check`, etc.) follow the new name.
+
+### Fixed
+- (C-01) `iaa chat` now maintains conversation context across turns — the model can recall previous messages within a session
+
+### Added
+- (A-01) Agent registry with `build` (full-access), `plan` (read-only), and `cli` (shell/infra) built-in agents; `--agent` flag on `iaa run` and `iaa chat`; `iaa agents` command
+- (A-02) User-defined agents — markdown files in `~/.config/ai-cli/agents/` with YAML frontmatter; supports `tools`, `readonly`, `model` overrides; composable with `--agent`
+- (X-02) Skill system — markdown files in `~/.config/ai-cli/skills/` with `{{placeholder}}` interpolation; `--skill` flag and `/name` shorthand; `iaa skills` command; multiple skills composable
+- (R-01) `read_file` line range support (`start_line`, `end_line` — 1-indexed, inclusive) and 150 KB size guard with guidance message
+- (R-02) Context eviction notification — model receives an in-context notice when messages are trimmed
+- (U-01) Context usage indicator — live bar and token counts in TUI header; threshold-based stderr output in plain/chat mode
+- (R-03) `ssh_upload` and `ssh_download` tools for SCP-based file transfer to/from remote hosts
+- (R-04) Recency-window loop detection (same tool 5+ times in last 8 calls) and per-tool failure escalation with hard abort after 3 consecutive failures
+- (R-05) System prompt rules 9 and 10: file size awareness before reading, and structured failure recovery strategy
+- (T-01) `delete_file` tool — safe single-file/empty-dir deletion; refuses wildcards and `.git/` paths
+- (T-02) `download_file` tool — streams a URL to a local file path with no size limit; 120s timeout
+- (T-03) `append_file` tool — appends content to a file without overwriting; creates file if missing
+- (F-01) `edit_file` tool — line-range replacement (`start_line`, `end_line`, `new_content`) with unified diff output
+- (F-02) `fetch` tool — HTTP/HTTPS GET and POST with redirect following (max 5), HTML stripping, 8 KB truncation, 15s timeout
+- (F-03) `git` tool — `status`, `diff`, `log`, `add`, `commit`, `branch`, `checkout`, `show`, `stash`; destructive subcommands blocked
+- (F-09) Native Ollama function calling for models with `tools` capability; falls back to the text parser when a response has no structured tool_calls (so text-format tool calls are still honoured)
+- (CLI-02) Interactive home menu when `iaa` is run with no arguments — agent/skill/settings navigation via arrow keys using Clack; falls back to help text in non-TTY
+
+---
+
 ## [0.1.0] — 2026-06-19
 
 First public release.
@@ -69,30 +98,3 @@ First public release.
 - Model name `:latest` suffix mismatch in `ai check` and `ai run` model availability test
 
 ---
-
-## [Unreleased]
-
-### Breaking
-- (CLI-01) CLI binary renamed from `ai` to `iaa`. Run `npm install -g .` to update. All subcommands (`iaa run`, `iaa chat`, `iaa check`, etc.) follow the new name.
-
-### Fixed
-- (C-01) `iaa chat` now maintains conversation context across turns — the model can recall previous messages within a session
-
-### Added
-- (A-01) Agent registry with `build` (full-access), `plan` (read-only), and `cli` (shell/infra) built-in agents; `--agent` flag on `ai run` and `ai chat`; `ai agents` command
-- (A-02) User-defined agents — markdown files in `~/.config/ai-cli/agents/` with YAML frontmatter; supports `tools`, `readonly`, `model` overrides; composable with `--agent`
-- (X-02) Skill system — markdown files in `~/.config/ai-cli/skills/` with `{{placeholder}}` interpolation; `--skill` flag and `/name` shorthand; `ai skills` command; multiple skills composable
-- (R-01) `read_file` line range support (`start_line`, `end_line` — 1-indexed, inclusive) and 150 KB size guard with guidance message
-- (R-02) Context eviction notification — model receives an in-context notice when messages are trimmed
-- (U-01) Context usage indicator — live bar and token counts in TUI header; threshold-based stderr output in plain/chat mode
-- (R-03) `ssh_upload` and `ssh_download` tools for SCP-based file transfer to/from remote hosts
-- (R-04) Recency-window loop detection (same tool 5+ times in last 8 calls) and per-tool failure escalation with hard abort after 3 consecutive failures
-- (R-05) System prompt rules 9 and 10: file size awareness before reading, and structured failure recovery strategy
-- (T-01) `delete_file` tool — safe single-file/empty-dir deletion; refuses wildcards and `.git/` paths
-- (T-02) `download_file` tool — streams a URL to a local file path with no size limit; 120s timeout
-- (T-03) `append_file` tool — appends content to a file without overwriting; creates file if missing
-- (F-01) `edit_file` tool — line-range replacement (`start_line`, `end_line`, `new_content`) with unified diff output
-- (F-02) `fetch` tool — HTTP/HTTPS GET and POST with redirect following (max 5), HTML stripping, 8 KB truncation, 15s timeout
-- (F-03) `git` tool — `status`, `diff`, `log`, `add`, `commit`, `branch`, `checkout`, `show`, `stash`; destructive subcommands blocked
-- (F-09) Native Ollama function calling for models with `tools` capability; 3-fallback XML parser retained for non-capable models
-- (CLI-02) Interactive home menu when `iaa` is run with no arguments — agent/skill/settings navigation via arrow keys using Clack; falls back to help text in non-TTY
