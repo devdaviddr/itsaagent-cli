@@ -19,8 +19,8 @@ export function buildToolDescriptions(tools: Tool[]): string {
     .join("\n\n");
 }
 
-export function buildSystemPrompt(tools: Tool[], cwd: string): string {
-  return [
+export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string): string {
+  const base = [
     `You are an AI agent that completes tasks by running tools step by step.`,
     `Follow the ReAct pattern: Thought → Action → Observation → Thought → …`,
     ``,
@@ -55,4 +55,6 @@ export function buildSystemPrompt(tools: Tool[], cwd: string): string {
     `7. Use relative paths unless an absolute path is required`,
     `8. Never repeat the same tool call with the same arguments`,
   ].join("\n");
+
+  return agentSuffix ? `${base}\n\n${agentSuffix}` : base;
 }

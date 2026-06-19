@@ -11,8 +11,14 @@ export function registerChatCommand(program: Command): void {
     .description("Interactive chat mode")
     .action(async () => {
       const conf = await loadConfig();
-      const opts = program.optsWithGlobals<{ verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number }>();
-      const agentConfig = toAgentConfig(conf, opts);
+      const opts = program.optsWithGlobals<{ verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number; agent?: string }>();
+      let agentConfig;
+      try {
+        agentConfig = toAgentConfig(conf, opts);
+      } catch (err) {
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exit(1);
+      }
       const runtime = new AgentRuntime(agentConfig);
 
       const { ok } = await runtime.checkProvider();

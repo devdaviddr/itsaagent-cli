@@ -9,6 +9,7 @@ import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
 import { parseResponse, stableKey } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
+import { MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
 export interface AgentRuntimeEvents {
   start: [payload: { task: string; model: string; cwd: string; logPath: string }];
@@ -37,10 +38,12 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private readonly ctx: ContextManager;
   private readonly tools: Map<string, Tool>;
   private readonly logger: SessionLogger;
+  private readonly agent?: AgentDefinition;
 
   constructor(config: AgentConfig) {
     super();
     this.config = config;
+    this.agent = config.agent;
     this.provider = createProvider(config.provider);
     this.ctx = new ContextManager(config.maxContextTokens);
     this.logger = new SessionLogger(config.logDir);
@@ -55,13 +58,33 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   /** Expose verbose flag so output layer can read it without a private cast */
   get verbose(): boolean { return this.config.verbose; }
 
+  /** True if the active agent permits calling the named tool. */
+  private isToolPermitted(name: string): boolean {
+    if (!this.agent) return true; // no agent = unrestricted (back-compat)
+    if (this.agent.readonly && MUTATION_TOOLS.has(name)) return false;
+    if (this.agent.tools === "all") return true;
+    return this.agent.tools.includes(name);
+  }
+
+  /** Registered tools the active agent is allowed to see and call. */
+  private permittedTools(): Tool[] {
+    return [...this.tools.values()].filter((t) => this.isToolPermitted(t.definition.name));
+  }
+
   private async executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    if (!this.isToolPermitted(name)) {
+      return {
+        success: false,
+        data: "",
+        error: "Tool not permitted by active agent",
+      };
+    }
     const tool = this.tools.get(name);
     if (!tool) {
       return {
         success: false,
         data: "",
-        error: `Unknown tool "${name}". Available: ${[...this.tools.keys()].join(", ")}`,
+        error: `Unknown tool "${name}". Available: ${this.permittedTools().map((t) => t.definition.name).join(", ")}`,
       };
     }
     try {
@@ -75,7 +98,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   initSession(): void {
     const cwd = process.cwd();
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt([...this.tools.values()], cwd) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix) });
   }
 
   /**
@@ -95,7 +118,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const startTime = Date.now();
 
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt([...this.tools.values()], cwd) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix) });
     this.ctx.add({ role: "user", content: task });
 
     await this.logger.init(task, this.config.provider.model, cwd);

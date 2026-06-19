@@ -43,6 +43,8 @@ export interface AgentConfig {
   maxSteps: number;
   maxContextTokens: number;
   logDir?: string;
+  /** Active agent definition. Defaults to the `build` agent when omitted. */
+  agent?: import("./agent/AgentDefinition.js").AgentDefinition;
 }
 
 export interface StreamChunk {

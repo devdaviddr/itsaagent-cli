@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { registerAgentsCommand } from "./cli/commands/agents.js";
 import { registerCheckCommand } from "./cli/commands/check.js";
 import { registerChatCommand } from "./cli/commands/chat.js";
 import { registerConfigCommand } from "./cli/commands/config.js";
@@ -17,10 +18,12 @@ program
   .option("-l, --log", "Write session log to disk (auto-enabled with -v)")
   .option("-m, --model <model>", "Override the model for this run")
   .option("--host <url>", "Override provider host URL")
-  .option("-s, --max-steps <n>", "Override max ReAct iterations", parseInt);
+  .option("-s, --max-steps <n>", "Override max ReAct iterations", parseInt)
+  .option("-a, --agent <id>", "Select an agent (build, plan, cli)");
 
 registerRunCommand(program);
 registerChatCommand(program);
+registerAgentsCommand(program);
 registerModelsCommand(program);
 registerCheckCommand(program);
 registerConfigCommand(program);

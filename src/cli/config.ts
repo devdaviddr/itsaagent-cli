@@ -2,6 +2,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentConfig, ProviderConfig } from "../types.js";
+import { AgentRegistry } from "../agent/AgentRegistry.js";
+import { DEFAULT_AGENT_ID } from "../agent/AgentDefinition.js";
 
 export const CONFIG_DIR = join(homedir(), ".config", "ai-cli");
 export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
@@ -44,12 +46,21 @@ export async function saveConfig(config: CliConfig): Promise<void> {
 
 export function toAgentConfig(
   conf: CliConfig,
-  opts: { verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number },
+  opts: { verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number; agent?: string },
 ): AgentConfig {
+  const registry = new AgentRegistry();
+  const agentId = opts.agent ?? DEFAULT_AGENT_ID;
+  const agent = registry.get(agentId);
+  if (!agent) {
+    const available = registry.list().map((a) => a.id).join(", ");
+    throw new Error(`Unknown agent "${agentId}". Available: ${available}`);
+  }
+
   const providerConfig: ProviderConfig = {
     type: conf.providerType,
     baseUrl: opts.host ?? conf.host,
-    model: opts.model ?? conf.model,
+    // Agent model override takes precedence over config, but an explicit --model flag wins.
+    model: opts.model ?? agent.model ?? conf.model,
     temperature: 0.15,
     maxTokens: 8192,
   };
@@ -60,5 +71,6 @@ export function toAgentConfig(
     maxSteps: opts.maxSteps ?? conf.maxSteps,
     maxContextTokens: conf.maxContextTokens,
     logDir: opts.log || opts.verbose ? conf.logDir : undefined,
+    agent,
   };
 }

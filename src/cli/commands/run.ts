@@ -10,11 +10,17 @@ export function registerRunCommand(program: Command): void {
     .description("Execute a task")
     .action(async (task: string) => {
       const conf = await loadConfig();
-      const opts = program.optsWithGlobals<{ verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number }>();
+      const opts = program.optsWithGlobals<{ verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number; agent?: string }>();
 
       if (opts.verbose) console.error(chalk.dim(`Config: ${CONFIG_PATH}`));
 
-      const agentConfig = toAgentConfig(conf, opts);
+      let agentConfig;
+      try {
+        agentConfig = toAgentConfig(conf, opts);
+      } catch (err) {
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exit(1);
+      }
       const runtime = new AgentRuntime(agentConfig);
 
       const { ok, models } = await runtime.checkProvider();

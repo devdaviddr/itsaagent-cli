@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import { AgentRuntime } from "../../src/agent/AgentRuntime.js";
+import { AgentRegistry } from "../../src/agent/AgentRegistry.js";
+import { DEFAULT_AGENT_ID, type AgentDefinition } from "../../src/agent/AgentDefinition.js";
+import { toAgentConfig, defaultConfig } from "../../src/cli/config.js";
+import type { AgentConfig } from "../../src/types.js";
+
+function makeConfig(agent?: AgentDefinition, overrides: Partial<AgentConfig> = {}): AgentConfig {
+  return {
+    provider: { type: "ollama", baseUrl: "http://localhost:11434", model: "test", temperature: 0.1, maxTokens: 512 },
+    verbose: false,
+    maxSteps: 10,
+    maxContextTokens: 8192,
+    agent,
+    ...overrides,
+  };
+}
+
+/** Runtime that calls a single tool then answers, so we can observe the tool result. */
+function withSingleToolCall(runtime: AgentRuntime, toolName: string) {
+  let step = 0;
+  (runtime as unknown as { provider: unknown }).provider = {
+    async *stream() {
+      step++;
+      const text = step === 1
+        ? `<tool_call>{"name":"${toolName}","args":{"command":"echo hi","path":"x"}}</tool_call>`
+        : `<answer>done</answer>`;
+      for (const c of text) yield { delta: c, done: false };
+      yield { delta: "", done: true };
+    },
+  };
+}
+
+describe("AgentRegistry", () => {
+  it("registers the three built-in agents", () => {
+    const registry = new AgentRegistry();
+    expect(registry.list().map((a) => a.id)).toEqual(["build", "plan", "cli"]);
+  });
+
+  it("default agent is build", () => {
+    const conf = toAgentConfig(defaultConfig(), {});
+    expect(conf.agent?.id).toBe(DEFAULT_AGENT_ID);
+    expect(conf.agent?.id).toBe("build");
+  });
+
+  it("--agent plan and --agent cli resolve correctly", () => {
+    expect(toAgentConfig(defaultConfig(), { agent: "plan" }).agent?.id).toBe("plan");
+    expect(toAgentConfig(defaultConfig(), { agent: "cli" }).agent?.id).toBe("cli");
+  });
+
+  it("throws on unknown agent id", () => {
+    expect(() => toAgentConfig(defaultConfig(), { agent: "nope" })).toThrow(/Unknown agent/);
+  });
+});
+
+describe("Agent tool permissions", () => {
+  it("build agent permits all tools", async () => {
+    const build = new AgentRegistry().get("build")!;
+    const runtime = new AgentRuntime(makeConfig(build));
+    withSingleToolCall(runtime, "bash");
+    const results: boolean[] = [];
+    runtime.on("tool:result", ({ result }) => results.push(result.success || result.error !== "Tool not permitted by active agent"));
+    await runtime.run("run a command");
+    // build is allowed to call bash — it should not be blocked by permissions
+    expect(results.some((ok) => ok)).toBe(true);
+  });
+
+  it("plan agent blocks bash with the permission error", async () => {
+    const plan = new AgentRegistry().get("plan")!;
+    const runtime = new AgentRuntime(makeConfig(plan));
+    withSingleToolCall(runtime, "bash");
+    const errors: (string | undefined)[] = [];
+    runtime.on("tool:result", ({ result }) => errors.push(result.error));
+    await runtime.run("run a command");
+    expect(errors).toContain("Tool not permitted by active agent");
+  });
+
+  it("cli agent blocks read_file with the permission error", async () => {
+    const cli = new AgentRegistry().get("cli")!;
+    const runtime = new AgentRuntime(makeConfig(cli));
+    withSingleToolCall(runtime, "read_file");
+    const errors: (string | undefined)[] = [];
+    runtime.on("tool:result", ({ result }) => errors.push(result.error));
+    await runtime.run("read a file");
+    expect(errors).toContain("Tool not permitted by active agent");
+  });
+});
+
+describe("Agent system prompt scoping", () => {
+  function systemPrompt(runtime: AgentRuntime): string {
+    runtime.initSession();
+    const ctx = (runtime as unknown as { ctx: { get(): { role: string; content: string }[] } }).ctx;
+    return ctx.get().find((m) => m.role === "system")!.content;
+  }
+
+  it("plan system prompt omits bash but includes read_file", () => {
+    const plan = new AgentRegistry().get("plan")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(plan)));
+    expect(prompt).toContain("### read_file");
+    expect(prompt).not.toContain("### bash");
+    expect(prompt).toContain("## Plan Agent");
+  });
+
+  it("cli system prompt includes bash but omits read_file", () => {
+    const cli = new AgentRegistry().get("cli")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(cli)));
+    expect(prompt).toContain("### bash");
+    expect(prompt).not.toContain("### read_file");
+  });
+
+  it("build system prompt includes all tools", () => {
+    const build = new AgentRegistry().get("build")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(build)));
+    expect(prompt).toContain("### bash");
+    expect(prompt).toContain("### read_file");
+  });
+});
