@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Added a tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main`; enabled automatically via the `prepare` script.
+- Added a project Claude skill (`.claude/skills/sdd/`) that enforces the Spec-Driven Development workflow: spec + versioning → branch → build → test → docs → merge → tag.
 
 ---
 
