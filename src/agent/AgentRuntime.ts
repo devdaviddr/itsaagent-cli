@@ -20,6 +20,7 @@ export interface AgentRuntimeEvents {
   "tool:result": [payload: { name: string; result: ToolResult; stepIndex: number }];
   answer: [payload: { text: string; steps: number; durationMs: number }];
   error: [payload: { error: AgentError; stepIndex?: number }];
+  "context:evict": [payload: { evicted: number; ratio: number }];
 }
 
 function formatToolResult(tool: string, args: Record<string, unknown>, result: ToolResult): string {
@@ -45,7 +46,9 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.config = config;
     this.agent = config.agent;
     this.provider = createProvider(config.provider);
-    this.ctx = new ContextManager(config.maxContextTokens);
+    this.ctx = new ContextManager(config.maxContextTokens, (evicted) => {
+      this.emit("context:evict", { evicted, ratio: this.ctx.usage().ratio });
+    });
     this.logger = new SessionLogger(config.logDir);
     this.tools = new Map();
     for (const t of getDefaultTools()) {

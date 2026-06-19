@@ -57,6 +57,10 @@ async function renderPlain(runtime: AgentRuntime, task: string, continueChat: bo
           console.error(chalk.dim(`  result: ${preview.replace(/\n/g, " ")}`));
         }
       });
+
+      runtime.on("context:evict", ({ evicted, ratio }) => {
+        console.error(chalk.yellow(`  ⚠ context trimmed (${evicted} message(s) evicted, ${ratio}% full)`));
+      });
     }
 
     runtime.on("answer", ({ text }) => resolve(text));

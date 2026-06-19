@@ -26,6 +26,8 @@ export interface Message {
   role: MessageRole;
   content: string;
   timestamp: number;
+  /** Runtime-injected context notice (e.g. eviction warning). Pinned, never logged. */
+  notice?: boolean;
 }
 
 export interface ProviderConfig {

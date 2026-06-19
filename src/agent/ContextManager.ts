@@ -5,14 +5,23 @@ const TOKEN_ESTIMATE_RATIO = 3.5;
 export class ContextManager {
   private messages: Message[] = [];
   private readonly maxTokens: number;
+  /** Cumulative count of messages evicted since the last clear(). */
+  private evictedTotal = 0;
+  private onEvict?: (count: number) => void;
 
-  constructor(maxTokens: number) {
+  constructor(maxTokens: number, onEvict?: (count: number) => void) {
     this.maxTokens = maxTokens;
+    this.onEvict = onEvict;
   }
 
   add(msg: Omit<Message, "timestamp">): void {
     this.messages.push({ ...msg, timestamp: Date.now() });
-    this.trim();
+    const evicted = this.trim();
+    if (evicted > 0) {
+      this.evictedTotal += evicted;
+      this.upsertNotice();
+      this.onEvict?.(evicted);
+    }
   }
 
   get(): Message[] {
@@ -27,6 +36,7 @@ export class ContextManager {
   clear(): void {
     const system = this.messages.find((m) => m.role === "system");
     this.messages = system ? [system] : [];
+    this.evictedTotal = 0;
   }
 
   usage(): { total: number; max: number; ratio: number } {
@@ -42,12 +52,49 @@ export class ContextManager {
     return this.messages.reduce((sum, m) => sum + this.estimateTokens(m.content), 0);
   }
 
-  private trim(): void {
-    while (this.totalTokens() > this.maxTokens && this.messages.length > 3) {
-      // Pin index 0 (system prompt) and index 1 (original user task) — evict from index 2 onward
-      const idx = this.messages.findIndex((_, i) => i > 1);
-      if (idx === -1) break;
+  /** Index of the first non-notice user message (the original task), or -1. */
+  private firstTaskIndex(): number {
+    return this.messages.findIndex((m) => m.role === "user" && !m.notice);
+  }
+
+  /** A message is pinned (never evicted) if it's the system prompt, the original task, or a notice. */
+  private isPinned(msg: Message, index: number): boolean {
+    if (msg.role === "system") return true;
+    if (msg.notice) return true;
+    if (index === this.firstTaskIndex()) return true;
+    return false;
+  }
+
+  /** Evict oldest non-pinned messages until within budget. Returns count evicted. */
+  private trim(): number {
+    let evicted = 0;
+    while (this.totalTokens() > this.maxTokens) {
+      const idx = this.messages.findIndex((m, i) => !this.isPinned(m, i));
+      if (idx === -1) break; // only pinned messages remain
       this.messages.splice(idx, 1);
+      evicted++;
     }
+    return evicted;
+  }
+
+  /**
+   * Insert or update the single context-eviction notice. Placed right after the
+   * original task so the model sees it early. The notice is pinned and is never
+   * written to the session log (it carries the `notice` flag).
+   */
+  private upsertNotice(): void {
+    const content =
+      `[CONTEXT NOTICE: ${this.evictedTotal} message(s) were trimmed to stay within the ` +
+      `context window. The original task and the most recent results are preserved.]`;
+
+    const existing = this.messages.find((m) => m.notice);
+    if (existing) {
+      existing.content = content;
+      return;
+    }
+
+    const taskIdx = this.firstTaskIndex();
+    const insertAt = taskIdx === -1 ? this.messages.length : taskIdx + 1;
+    this.messages.splice(insertAt, 0, { role: "user", content, timestamp: Date.now(), notice: true });
   }
 }

@@ -72,4 +72,47 @@ describe("ContextManager", () => {
     expect(usage.max).toBe(100);
     expect(usage.ratio).toBeGreaterThan(0);
   });
+
+  it("injects a context notice after eviction", () => {
+    const ctx = new ContextManager(40);
+    ctx.add({ role: "system", content: "sys" });
+    ctx.add({ role: "user", content: "task" });
+    ctx.add({ role: "assistant", content: "x".repeat(120) });
+    ctx.add({ role: "user", content: "y".repeat(120) });
+    const notice = ctx.get().find((m) => m.notice);
+    expect(notice).toBeDefined();
+    expect(notice?.content).toMatch(/CONTEXT NOTICE/);
+  });
+
+  it("fires the onEvict callback with the evicted count", () => {
+    const counts: number[] = [];
+    const ctx = new ContextManager(40, (n) => counts.push(n));
+    ctx.add({ role: "system", content: "sys" });
+    ctx.add({ role: "user", content: "task" });
+    ctx.add({ role: "user", content: "z".repeat(200) });
+    ctx.add({ role: "user", content: "w".repeat(200) });
+    expect(counts.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+  });
+
+  it("keeps a single accumulating notice across repeated evictions", () => {
+    const ctx = new ContextManager(40);
+    ctx.add({ role: "system", content: "sys" });
+    ctx.add({ role: "user", content: "task" });
+    for (let i = 0; i < 6; i++) {
+      ctx.add({ role: "user", content: `result ${i} `.repeat(20) });
+    }
+    const notices = ctx.get().filter((m) => m.notice);
+    expect(notices).toHaveLength(1);
+  });
+
+  it("clear() removes the notice and resets eviction state", () => {
+    const ctx = new ContextManager(40);
+    ctx.add({ role: "system", content: "sys" });
+    ctx.add({ role: "user", content: "task" });
+    ctx.add({ role: "user", content: "q".repeat(200) });
+    ctx.add({ role: "user", content: "r".repeat(200) });
+    expect(ctx.get().some((m) => m.notice)).toBe(true);
+    ctx.clear();
+    expect(ctx.get().some((m) => m.notice)).toBe(false);
+  });
 });
