@@ -2,10 +2,17 @@
 
 export type UsageLevel = "low" | "mid" | "high";
 
+/**
+ * Context-usage thresholds (percent). Single source of truth — the context bar,
+ * header, and theme colour mapping all derive their boundaries from these.
+ */
+export const CTX_MID_THRESHOLD = 60;
+export const CTX_HIGH_THRESHOLD = 80;
+
 /** Threshold mapping: <60% low, 60–80% mid, >80% high. */
 export function usageLevel(ratio: number): UsageLevel {
-  if (ratio > 80) return "high";
-  if (ratio >= 60) return "mid";
+  if (ratio > CTX_HIGH_THRESHOLD) return "high";
+  if (ratio >= CTX_MID_THRESHOLD) return "mid";
   return "low";
 }
 

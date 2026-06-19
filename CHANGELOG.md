@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- (v0.4.0 spec) Persistent opencode-style TUI — see `spec/v0.4.0.md`. Foundation landed: a central TUI theme palette (`src/cli/tui/theme.ts`, ≥2 built-in themes, optional `theme` config field) with shared context-usage thresholds, and a pure conversation-state reducer (`src/cli/tui/state/conversation.ts`) that maps the agent event stream to an ordered, scrollable entry log with a bounded streaming buffer.
+
 ### Changed
 - Added a tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main`; enabled automatically via the `prepare` script.
 - Added a project Claude skill (`.claude/skills/new-feature-skill/`) that enforces the Spec-Driven Development workflow: spec + versioning → branch → build → test → docs → merge → tag.
