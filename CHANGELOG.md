@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - (M-01) `iaa tools [name]` command — lists built-in tools with required params; `iaa tools <name>` shows full parameter detail and which built-in agents permit it. Home menu gains a "Tools" browser.
+- (M-02) Home menu agent selection — `Agent: <id>` item opens a picker (built-ins first, custom tagged); Run/Chat use the chosen agent.
+- (M-05) Home menu status header — shows `agent · model · provider · host`, with a ⚡ marker when the active model supports native tool use; updates after changes.
+- (M-06) Home menu model picker — `Model: <name>` item lists live provider models and persists the choice.
+- (M-04) Consistent back navigation — every sub-menu has a "← Back" item; Esc goes back in sub-menus and quits at the home menu.
 
 ### Fixed
 - Conversational input (greetings, small talk, questions answerable from knowledge) is now answered directly instead of triggering tool use — fixes `iaa chat` running `bash` for "hello". Added a prompt rule against interactive commands (`read`, editors) that have no stdin.

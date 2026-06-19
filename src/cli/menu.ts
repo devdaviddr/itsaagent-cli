@@ -3,11 +3,19 @@ import chalk from "chalk";
 import { loadConfig, saveConfig, toAgentConfig, type CliConfig } from "./config.js";
 import { AgentRuntime } from "../agent/AgentRuntime.js";
 import { AgentRegistry } from "../agent/AgentRegistry.js";
-import { BUILTIN_AGENT_IDS } from "../agent/AgentDefinition.js";
+import { DEFAULT_AGENT_ID } from "../agent/AgentDefinition.js";
 import { loadSkills } from "../agent/SkillLoader.js";
 import { getDefaultTools } from "../tools/index.js";
 import { formatToolDetail } from "./commands/tools.js";
 import { runAgent } from "./output.js";
+import {
+  statusHeader,
+  agentPickerOptions,
+  handleCancel,
+  applyModelSelection,
+  BACK_VALUE,
+  type MenuState,
+} from "./menuHelpers.js";
 
 /** The home menu is shown only when invoked with no args in an interactive terminal. */
 export function shouldShowMenu(argv: string[], isTTY: boolean): boolean {
@@ -28,29 +36,27 @@ export function applyProviderSettings(
   };
 }
 
-async function runTaskFlow(): Promise<void> {
+async function runTaskFlow(agentId: string): Promise<void> {
   const task = await text({ message: "Task:", placeholder: "e.g. list the largest files in src/" });
   if (isCancel(task) || !task) return;
   const conf = await loadConfig();
-  const agentConfig = await toAgentConfig(conf, {});
-  const runtime = new AgentRuntime(agentConfig);
+  const runtime = new AgentRuntime(await toAgentConfig(conf, { agent: agentId }));
   const { ok } = await runtime.checkProvider();
   if (!ok) { console.error(chalk.red(`Cannot reach ${conf.providerType} at ${conf.host}`)); return; }
   const answer = await runAgent(runtime, String(task));
   console.log(`\n${answer}\n`);
 }
 
-async function chatFlow(): Promise<void> {
+async function chatFlow(agentId: string): Promise<void> {
   const conf = await loadConfig();
-  const agentConfig = await toAgentConfig(conf, {});
-  const runtime = new AgentRuntime(agentConfig);
+  const runtime = new AgentRuntime(await toAgentConfig(conf, { agent: agentId }));
   const { ok } = await runtime.checkProvider();
   if (!ok) { console.error(chalk.red(`Cannot reach ${conf.providerType} at ${conf.host}`)); return; }
-  console.error(chalk.dim("  /exit to return to the menu\n"));
+  console.error(chalk.dim(`  ${agentId} agent · /exit to return to the menu\n`));
   runtime.initSession();
   let first = true;
   while (true) {
-    const input = await text({ message: ">" });
+    const input = await text({ message: `${agentId} ›` });
     if (isCancel(input) || input === "/exit") break;
     if (!input || typeof input !== "string") continue;
     const answer = await runAgent(runtime, input, !first);
@@ -59,14 +65,41 @@ async function chatFlow(): Promise<void> {
   }
 }
 
-async function showAgents(): Promise<void> {
+/** Agent picker. Returns the chosen id, or undefined on Back/cancel. */
+async function pickAgent(currentId: string): Promise<string | undefined> {
   const registry = await AgentRegistry.create();
-  console.log(chalk.bold("\nAgents:"));
-  for (const a of registry.list()) {
-    const tag = BUILTIN_AGENT_IDS.has(a.id) ? "" : chalk.magenta(" [custom]");
-    console.log(`  ${chalk.cyan(a.id.padEnd(10))} ${a.description}${tag}`);
-  }
-  console.log();
+  const choice = await select({
+    message: "Select agent",
+    options: agentPickerOptions(registry.list(), (id) => registry.isBuiltin(id)),
+    initialValue: currentId,
+  });
+  if (isCancel(choice) || choice === BACK_VALUE) return undefined;
+  return String(choice);
+}
+
+/** Model picker from live provider models. Persists selection. Returns chosen model or undefined. */
+async function pickModel(): Promise<string | undefined> {
+  const conf = await loadConfig();
+  const runtime = new AgentRuntime(await toAgentConfig(conf, {}));
+  const { ok, models } = await runtime.checkProvider();
+  if (!ok) { console.error(chalk.red(`Cannot reach ${conf.providerType} at ${conf.host}`)); return undefined; }
+  if (models.length === 0) { console.error(chalk.yellow("No models available.")); return undefined; }
+
+  const choice = await select({
+    message: "Select model",
+    options: [
+      ...models.map((m) => ({
+        value: m.name,
+        label: m.name,
+        hint: m.size ? `${(m.size / 1024 / 1024 / 1024).toFixed(1)} GB` : undefined,
+      })),
+      { value: BACK_VALUE, label: "← Back" },
+    ],
+    initialValue: conf.model,
+  });
+  if (isCancel(choice) || choice === BACK_VALUE) return undefined;
+  await saveConfig(applyModelSelection(conf, String(choice)));
+  return String(choice);
 }
 
 async function browseTools(): Promise<void> {
@@ -76,10 +109,10 @@ async function browseTools(): Promise<void> {
       message: "Tools",
       options: [
         ...tools.map((t) => ({ value: t.definition.name, label: t.definition.name, hint: t.definition.description })),
-        { value: "__back", label: "← Back" },
+        { value: BACK_VALUE, label: "← Back" },
       ],
     });
-    if (isCancel(choice) || choice === "__back") return;
+    if (isCancel(choice) || choice === BACK_VALUE) return;
     const tool = tools.find((t) => t.definition.name === choice);
     if (tool) console.log(formatToolDetail(tool));
   }
@@ -111,28 +144,48 @@ async function settingsFlow(): Promise<void> {
   const apiKey = await text({ message: "API key (blank to keep current)", initialValue: "" });
   if (isCancel(apiKey)) return;
 
-  const updated = applyProviderSettings(conf, {
+  await saveConfig(applyProviderSettings(conf, {
     providerType: String(providerType),
     host: String(host),
     model: String(model),
     apiKey: String(apiKey),
-  });
-  await saveConfig(updated);
+  }));
   console.log(chalk.green("\nSettings saved.\n"));
+}
+
+/** Best-effort: detect provider reachability and the active model's tool-use support. */
+async function refreshProviderState(state: MenuState): Promise<void> {
+  try {
+    const conf = await loadConfig();
+    const runtime = new AgentRuntime(await toAgentConfig(conf, { agent: state.agentId }));
+    const { ok } = await runtime.checkProvider();
+    state.online = ok;
+    state.nativeTools = ok ? await runtime.detectToolUse() : undefined;
+  } catch {
+    state.online = false;
+  }
 }
 
 export async function showHomeMenu(): Promise<void> {
   const conf = await loadConfig();
+  const state: MenuState = {
+    agentId: DEFAULT_AGENT_ID,
+    model: conf.model,
+    providerType: conf.providerType,
+    host: conf.host,
+  };
   intro(chalk.bold("ItsAAgent"));
-  console.error(chalk.dim(`  ${conf.model}  ·  ${conf.providerType}  ·  ${conf.host}\n`));
+  await refreshProviderState(state);
 
   while (true) {
+    console.error(statusHeader(state));
     const choice = await select({
       message: "What would you like to do?",
       options: [
         { value: "run", label: "Run a task" },
         { value: "chat", label: "Chat" },
-        { value: "agents", label: "Agents" },
+        { value: "agent", label: `Agent: ${state.agentId}` },
+        { value: "model", label: `Model: ${state.model}` },
         { value: "tools", label: "Tools" },
         { value: "skills", label: "Skills" },
         { value: "settings", label: "Provider settings" },
@@ -140,18 +193,35 @@ export async function showHomeMenu(): Promise<void> {
       ],
     });
 
-    if (isCancel(choice) || choice === "quit") {
+    if ((isCancel(choice) && handleCancel(0) === "quit") || choice === "quit") {
       outro("Goodbye.");
       return;
     }
 
     switch (choice) {
-      case "run": await runTaskFlow(); break;
-      case "chat": await chatFlow(); break;
-      case "agents": await showAgents(); break;
+      case "run": await runTaskFlow(state.agentId); break;
+      case "chat": await chatFlow(state.agentId); break;
+      case "agent": {
+        const picked = await pickAgent(state.agentId);
+        if (picked) state.agentId = picked;
+        break;
+      }
+      case "model": {
+        const picked = await pickModel();
+        if (picked) { state.model = picked; await refreshProviderState(state); }
+        break;
+      }
       case "tools": await browseTools(); break;
       case "skills": await showSkills(); break;
-      case "settings": await settingsFlow(); break;
+      case "settings": {
+        await settingsFlow();
+        const updated = await loadConfig();
+        state.model = updated.model;
+        state.providerType = updated.providerType;
+        state.host = updated.host;
+        await refreshProviderState(state);
+        break;
+      }
     }
   }
 }
