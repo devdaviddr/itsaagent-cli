@@ -49,9 +49,26 @@ export interface AgentConfig {
   agent?: import("./agent/AgentDefinition.js").AgentDefinition;
 }
 
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
 export interface StreamChunk {
   delta: string;
   done: boolean;
+  /** Native function-calling output, present on the final chunk when the model calls a tool. */
+  toolCalls?: ToolCall[];
+}
+
+/** OpenAI/Ollama function-calling tool schema. */
+export interface ToolSpec {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: ToolDefinition["parameters"];
+  };
 }
 
 export type StepStatus = "thinking" | "executing" | "done" | "error";

@@ -1,4 +1,4 @@
-import type { StreamChunk } from "../types.js";
+import type { StreamChunk, ToolSpec } from "../types.js";
 
 export interface ChatMessage {
   role: string;
@@ -11,7 +11,11 @@ export interface ModelInfo {
 }
 
 export interface Provider {
-  stream(messages: ChatMessage[]): AsyncGenerator<StreamChunk>;
+  /** Stream a completion. When `tools` is provided and the model supports native
+   *  function calling, the final chunk carries `toolCalls`. */
+  stream(messages: ChatMessage[], tools?: ToolSpec[]): AsyncGenerator<StreamChunk>;
   checkHealth(): Promise<boolean>;
   listModels(): Promise<ModelInfo[]>;
+  /** True if the active model supports native tool calling. Optional — absent = no support. */
+  supportsTools?(): Promise<boolean>;
 }

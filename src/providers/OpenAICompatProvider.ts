@@ -1,5 +1,5 @@
 import { ProviderError } from "../agent/errors.js";
-import type { ProviderConfig, StreamChunk } from "../types.js";
+import type { ProviderConfig, StreamChunk, ToolSpec } from "../types.js";
 import type { ChatMessage, ModelInfo, Provider } from "./Provider.js";
 
 interface SSEDelta {
@@ -21,7 +21,10 @@ export class OpenAICompatProvider implements Provider {
     this.apiKey = config.apiKey ?? process.env.AI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
   }
 
-  async *stream(messages: ChatMessage[]): AsyncGenerator<StreamChunk> {
+  // Native tool-use is not yet wired for OpenAI-compatible providers; tools are accepted
+  // for interface compatibility and ignored, so the text-parser path is used.
+  async *stream(messages: ChatMessage[], _tools?: ToolSpec[]): AsyncGenerator<StreamChunk> {
+    void _tools;
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/v1/chat/completions`, {

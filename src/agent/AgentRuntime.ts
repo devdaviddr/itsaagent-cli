@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { AgentConfig, Tool, ToolResult } from "../types.js";
+import type { AgentConfig, Tool, ToolResult, ToolSpec, ToolCall } from "../types.js";
 import { createProvider } from "../providers/index.js";
 import type { Provider } from "../providers/Provider.js";
 import { getDefaultTools } from "../tools/index.js";
@@ -7,7 +7,7 @@ import { ContextManager } from "./ContextManager.js";
 import { LoopDetectedError, MaxStepsError, toErrorMessage } from "./errors.js";
 import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
-import { parseResponse, stableKey } from "./parser.js";
+import { parseResponse, stableKey, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
 import { MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
@@ -41,6 +41,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private readonly tools: Map<string, Tool>;
   private readonly logger: SessionLogger;
   private readonly agent?: AgentDefinition;
+  /** Cached native-tool-use capability of the active model (detected once). */
+  private toolUseMode: boolean | undefined;
 
   constructor(config: AgentConfig) {
     super();
@@ -81,6 +83,26 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     return [...this.tools.values()].filter((t) => this.isToolPermitted(t.definition.name));
   }
 
+  /** Permitted tools translated to the provider's function-calling schema. */
+  private toolSpecs(): ToolSpec[] {
+    return this.permittedTools().map((t) => ({
+      type: "function",
+      function: {
+        name: t.definition.name,
+        description: t.definition.description,
+        parameters: t.definition.parameters,
+      },
+    }));
+  }
+
+  /** Detect (once) whether the active model supports native tool calling. */
+  async detectToolUse(): Promise<boolean> {
+    if (this.toolUseMode === undefined) {
+      this.toolUseMode = this.provider.supportsTools ? await this.provider.supportsTools() : false;
+    }
+    return this.toolUseMode;
+  }
+
   private async executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     if (!this.isToolPermitted(name)) {
       return {
@@ -118,6 +140,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   async continueChat(task: string): Promise<string> {
     const startTime = Date.now();
     this.ctx.add({ role: "user", content: task });
+    await this.detectToolUse();
     await this.logger.init(task, this.config.provider.model, process.cwd());
     this.emit("start", { task, model: this.config.provider.model, cwd: process.cwd(), logPath: this.logger.filePath });
     return this.runLoop(startTime);
@@ -131,6 +154,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix) });
     this.ctx.add({ role: "user", content: task });
 
+    await this.detectToolUse();
     await this.logger.init(task, this.config.provider.model, cwd);
     this.emit("start", { task, model: this.config.provider.model, cwd, logPath: this.logger.filePath });
     return this.runLoop(startTime);
@@ -138,17 +162,30 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
   private async runLoop(startTime: number): Promise<string> {
     const callCounts = new Map<string, number>();
+    const useTools = this.toolUseMode === true;
+    const toolSpecs = useTools ? this.toolSpecs() : undefined;
 
     for (let step = 1; step <= this.config.maxSteps; step++) {
       this.emit("step", { index: step, total: this.config.maxSteps });
 
       let raw = "";
-      for await (const chunk of this.provider.stream(this.ctx.forProvider())) {
+      let nativeCalls: ToolCall[] | undefined;
+      for await (const chunk of this.provider.stream(this.ctx.forProvider(), toolSpecs)) {
         raw += chunk.delta;
         if (chunk.delta) this.emit("chunk", { delta: chunk.delta, stepIndex: step });
+        if (chunk.toolCalls && chunk.toolCalls.length > 0) nativeCalls = chunk.toolCalls;
       }
 
-      const parsed = parseResponse(raw);
+      // Native tool-use: structure comes from the API, so parseResponse is skipped.
+      // Falls through to the text parser when the model returns no tool_calls.
+      let parsed: ParsedResponse;
+      if (useTools && nativeCalls && nativeCalls.length > 0) {
+        parsed = { thought: raw.trim() || undefined, toolCall: nativeCalls[0], isExplicitAnswer: false };
+      } else if (useTools) {
+        parsed = { answer: raw.trim(), isExplicitAnswer: true };
+      } else {
+        parsed = parseResponse(raw);
+      }
 
       if (parsed.thought) {
         this.emit("thought", { text: parsed.thought, stepIndex: step });

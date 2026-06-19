@@ -36,6 +36,13 @@ export function registerCheckCommand(program: Command): void {
       }
 
       console.error(chalk.green(`\n✓ Provider online (${models.length} model${models.length === 1 ? "" : "s"})`));
-      console.error(chalk.green(`✓ Model "${agentConfig.provider.model}" ready\n`));
+      console.error(chalk.green(`✓ Model "${agentConfig.provider.model}" ready`));
+
+      const nativeTools = await runtime.detectToolUse();
+      if (nativeTools) {
+        console.error(chalk.green(`✓ Native tool use supported\n`));
+      } else {
+        console.error(chalk.yellow(`✗ Native tool use not supported — using text-parser fallback\n`));
+      }
     });
 }
