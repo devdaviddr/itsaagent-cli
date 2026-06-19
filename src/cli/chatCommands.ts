@@ -8,6 +8,9 @@ export type ChatCommand =
   | { kind: "agents" }
   | { kind: "agent"; name: string }
   | { kind: "model"; name: string }
+  | { kind: "models" }
+  | { kind: "theme"; name: string }
+  | { kind: "tools" }
   | { kind: "unknown"; cmd: string };
 
 export function parseChatInput(input: string): ChatCommand {
@@ -30,9 +33,48 @@ export function parseChatInput(input: string): ChatCommand {
       return { kind: "agent", name: arg };
     case "model":
       return { kind: "model", name: arg };
+    case "models":
+      return { kind: "models" };
+    case "theme":
+      return { kind: "theme", name: arg };
+    case "tools":
+      return { kind: "tools" };
     default:
       return { kind: "unknown", cmd };
   }
+}
+
+export interface CommandMeta {
+  name: string;
+  /** Argument placeholder shown in autocomplete, e.g. "<name>". */
+  arg?: string;
+  help: string;
+}
+
+/** All slash commands, in display order. Drives autocomplete and /help. */
+export const COMMANDS: CommandMeta[] = [
+  { name: "help", help: "show commands" },
+  { name: "agent", arg: "<name>", help: "switch agent (resets context)" },
+  { name: "agents", help: "list agents" },
+  { name: "model", arg: "<name>", help: "switch model (persists)" },
+  { name: "models", help: "list available models" },
+  { name: "theme", arg: "<name>", help: "switch theme (persists)" },
+  { name: "tools", help: "list tools" },
+  { name: "clear", help: "reset the conversation" },
+  { name: "exit", help: "leave" },
+];
+
+/**
+ * Autocomplete matches for the current input. Returns command suggestions only
+ * while the command name is still being typed (before the first space), so the
+ * popup disappears once the user moves on to arguments.
+ */
+export function matchCommands(input: string): CommandMeta[] {
+  const t = input.trimStart();
+  if (!t.startsWith("/")) return [];
+  if (/\s/.test(t.trim())) return [];
+  const partial = t.slice(1).toLowerCase();
+  return COMMANDS.filter((c) => c.name.startsWith(partial));
 }
 
 export const CHAT_HELP = [
@@ -40,6 +82,9 @@ export const CHAT_HELP = [
   "  /agent <name>   switch agent (resets context)",
   "  /agents         list available agents",
   "  /model <name>   switch model (persists)",
+  "  /models         list available models",
+  "  /theme <name>   switch theme (persists)",
+  "  /tools          list tools",
   "  /clear          reset the conversation",
   "  /help           show this help",
   "  /exit           leave chat",

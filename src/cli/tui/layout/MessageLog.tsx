@@ -10,15 +10,16 @@ interface MessageLogProps {
   width: number;
   /** Live streaming text for the in-flight step (bounded to the active step). */
   live: string;
+  focusedToolId: number | null;
 }
 
 /** Scrollable transcript region. Windowing is done by the parent so the status line can share it. */
-export function MessageLog({ visible, theme, width, live }: MessageLogProps) {
+export function MessageLog({ visible, theme, width, live, focusedToolId }: MessageLogProps) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       {visible.map((entry) => (
         <Box key={entry.id} marginBottom={entry.kind === "answer" ? 1 : 0}>
-          <EntryView entry={entry} theme={theme} width={width} />
+          <EntryView entry={entry} theme={theme} width={width} focusedToolId={focusedToolId} />
         </Box>
       ))}
       {live ? (
