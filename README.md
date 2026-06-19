@@ -18,20 +18,24 @@ Built for developers who want an autonomous agent without a cloud subscription.
 ## Features
 
 - **ReAct loop** — Thought → Action → Observation, repeated until done or the step limit is reached
-- **Live TUI** — Ink-powered terminal UI with streaming output, step-by-step progress, and colour-coded status
-- **Six built-in tools** — `bash`, `ssh`, `read_file`, `write_file`, `glob`, `grep`
-- **SSH + Wake-on-LAN** — connects to remote servers, auto-wakes sleeping machines before retrying
+- **Native tool calling** — uses Ollama's function-calling API for capable models, with a text parser as automatic fallback
+- **Built-in agents** — `build` (full access), `plan` (read-only), `cli` (shell/infra); each scopes which tools the model may call
+- **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
+- **13 built-in tools** — `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
+- **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
+- **Interactive home menu** — run `iaa` with no arguments for a guided menu (run a task, chat, browse agents/skills, settings)
+- **Live TUI** — Ink-powered terminal UI with streaming output, step-by-step progress, and a context-usage bar
 - **Provider abstraction** — Ollama (default) or any OpenAI-compatible endpoint
-- **Context management** — 24 576-token window, oldest-first eviction, system prompt and task always pinned
+- **Context management** — 24 576-token window, oldest-first eviction with an in-context trim notice
 - **Session logging** — structured markdown log per run (`-v` or `-l`)
-- **Extensible tool system** — add a new tool in one file, zero boilerplate
-- **Loop detection** — aborts if the same tool is called 3× with identical arguments
+- **Resilience** — exact-match and recency-window loop detection, per-tool failure escalation, large-file read guards
 
 ---
 
 ## Requirements
 
 - [Node.js](https://nodejs.org) 18+
+- [pnpm](https://pnpm.io) 9+ (`corepack enable pnpm`, or `npm i -g pnpm` once)
 - [Ollama](https://ollama.com) running locally
 
 ---
@@ -45,15 +49,18 @@ ollama pull qwen2.5-coder:7b
 # Clone and install
 git clone https://github.com/devdaviddr/itsaagent-cli.git
 cd itsaagent-cli
-npm install
-npm run build
-npm install -g .
+pnpm install
+pnpm build
+pnpm add -g .          # install the global `iaa` binary
 
-# Verify everything is connected
+# Verify everything is connected (also reports native tool-use support)
 iaa check
 
 # Run a task
 iaa run "list typescript files in this project and count lines of code" -v
+
+# …or just launch the interactive menu
+iaa
 ```
 
 ---
@@ -61,10 +68,13 @@ iaa run "list typescript files in this project and count lines of code" -v
 ## CLI reference
 
 ```
-iaa run <task>       Execute a one-shot task
-iaa chat             Interactive multi-turn session
+iaa                  Interactive home menu (no arguments, in a terminal)
+iaa run <task...>    Execute a one-shot task (prefix /skill-name to run a skill)
+iaa chat             Interactive multi-turn session (keeps context; /clear, /exit)
+iaa agents           List available agents and their tool access
+iaa skills           List installed skills
 iaa models           List available Ollama models
-iaa check            Verify Ollama connection and model availability
+iaa check            Verify Ollama, model availability, and native tool-use support
 iaa config           View or update persistent config
 ```
 
@@ -75,6 +85,9 @@ iaa config           View or update persistent config
 | `-v, --verbose` | Stream thoughts, tool calls, and results live. Also writes a session log. |
 | `-l, --log` | Write session log only (no console output beyond the final answer) |
 | `-m, --model <name>` | Override model for this run |
+| `-a, --agent <id>` | Select an agent: `build` (default), `plan`, `cli`, or a custom one |
+| `--skill <name>` | Apply a skill (repeatable) |
+| `--skill-arg <name=value>` | Provide a value for a skill placeholder (repeatable) |
 | `-s, --max-steps <n>` | Override max ReAct iterations (default: 25) |
 | `--host <url>` | Ollama server URL (default: `http://localhost:11434`) |
 
@@ -125,11 +138,11 @@ Config stored at `~/.config/ai-cli/config.json`.
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │   ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│   │ parser.ts    │  │ContextManager│  │  SessionLogger     │   │
-│   │ 3-fallback   │  │ token trim   │  │  markdown/session  │   │
-│   │ XML→legacy   │  │ pin sys+task │  │  ~/.config/ai-cli  │   │
-│   │ →bare JSON   │  └──────────────┘  └────────────────────┘   │
-│   └──────────────┘                                              │
+│   │ native tools │  │ContextManager│  │  SessionLogger     │   │
+│   │ + parser.ts  │  │ trim + notice│  │  markdown/session  │   │
+│   │ fallback     │  │ usage events │  │  ~/.config/ai-cli  │   │
+│   │              │  └──────────────┘  └────────────────────┘   │
+│   └──────────────┘   AgentRegistry · SkillLoader (markdown)     │
 └────────────────────────┬────────────────────────────────────────┘
                          │
          ┌───────────────┴────────────────┐
@@ -138,13 +151,13 @@ Config stored at `~/.config/ai-cli/config.json`.
 │  Provider Layer   │          │     Tool Registry    │
 │  (src/providers/) │          │     (src/tools/)     │
 │                   │          │                      │
-│  ┌─────────────┐  │          │  bash      glob      │
-│  │OllamaProvider│  │          │  read_file grep      │
-│  │NDJSON stream│  │          │  write_file ssh       │
-│  └─────────────┘  │          │                      │
-│  ┌─────────────┐  │          └──────────────────────┘
-│  │OpenAICompat │  │
-│  │SSE stream   │  │
+│  ┌─────────────┐  │          │  bash   ssh   git    │
+│  │OllamaProvider│  │          │  fetch  glob  grep   │
+│  │+ tool_calls │  │          │  read/write/edit/    │
+│  └─────────────┘  │          │  append/delete_file  │
+│  ┌─────────────┐  │          │  download_file       │
+│  │OpenAICompat │  │          │  ssh_upload/download │
+│  │SSE stream   │  │          └──────────────────────┘
 │  └─────────────┘  │
 └───────────┬───────┘
             │
@@ -157,6 +170,63 @@ Config stored at `~/.config/ai-cli/config.json`.
 
 ---
 
+## Agents
+
+An agent is a named persona with a scoped tool set. Pick one with `--agent <id>` (default `build`):
+
+| Agent | Purpose | Tool access |
+|---|---|---|
+| `build` | Full-access development work | all tools |
+| `plan` | Read-only analysis — no mutations, no shell | `read_file`, `glob`, `grep`, `git`, `fetch` |
+| `cli` | Shell and infrastructure | `bash`, `ssh`, `ssh_upload`, `ssh_download`, `fetch`, `download_file` |
+
+A tool the active agent isn't allowed to call is rejected before it runs, and the system prompt only describes permitted tools.
+
+### Custom agents
+
+Drop a markdown file in `~/.config/ai-cli/agents/<name>.md`:
+
+```markdown
+---
+name: reviewer
+description: Review code changes — read-only
+tools: [read_file, glob, grep, git]
+readonly: true
+---
+You are a code reviewer. Focus on correctness and clarity.
+```
+
+Then run `iaa run --agent reviewer "review the diff"`. List all agents with `iaa agents`.
+
+---
+
+## Skills
+
+A skill is a reusable instruction overlay that extends the system prompt without changing tool access. Put one in `~/.config/ai-cli/skills/<name>.md`:
+
+```markdown
+---
+name: refactor
+description: Refactor TypeScript for strict-mode compliance
+args:
+  - name: target
+    description: File or directory to refactor
+    required: true
+---
+Refactor with strict null checks and no implicit any. Target: {{target}}
+```
+
+Invoke it:
+
+```bash
+iaa run --skill refactor --skill-arg target=src/tools/bash.ts "clean this up"
+iaa run /refactor src/tools/bash.ts          # shorthand, positional args
+```
+
+Skills compose (`--skill a --skill b`). List them with `iaa skills`.
+
+---
+
 ## Tool system
 
 ### Built-in tools
@@ -165,8 +235,15 @@ Config stored at `~/.config/ai-cli/config.json`.
 |---|---|
 | `bash` | Execute any shell command. 30s timeout, 10MB buffer, `execFile` (no shell injection). |
 | `ssh` | Run a command on a remote server. Password from `SSH_PASS` env, ControlMaster persistence, Wake-on-LAN. |
-| `read_file` | Read a file's contents. |
+| `ssh_upload` / `ssh_download` | Transfer files to/from a remote host via `scp` (key auth, or `sshpass` for passwords). |
+| `git` | Safe subcommands: `status`, `diff`, `log`, `add`, `commit`, `branch`, `checkout`, `show`, `stash`. Destructive ops blocked. |
+| `fetch` | HTTP(S) GET/POST. Follows ≤5 redirects, strips HTML to text, truncates to 8 KB, 15s timeout. |
+| `read_file` | Read a file. Optional `start_line`/`end_line` ranges; rejects whole-file reads over 150 KB. |
 | `write_file` | Write content to a file, creating parent directories as needed. |
+| `edit_file` | Replace a line range and return a unified diff. `end = start - 1` inserts; empty content deletes. |
+| `append_file` | Append to a file without overwriting; creates it if missing. |
+| `delete_file` | Delete a single file or empty dir. Refuses wildcards and `.git` paths. |
+| `download_file` | Stream a URL to disk with no size limit (≤5 redirects, 120s timeout). |
 | `glob` | Find files by glob pattern. |
 | `grep` | Search file contents (ripgrep with grep fallback). |
 
@@ -221,8 +298,8 @@ The primary target is `qwen2.5-coder:7b` on Ollama. Several design decisions exi
 
 | Decision | Why |
 |---|---|
+| Native function calling, with parser fallback | Capable models emit structured `tool_calls`; the `<thought>`/`<tool_call>`/`<answer>` text parser still catches responses that come back as text |
 | XML-tagged prompting (`<thought>`, `<tool_call>`, `<answer>`) | qwen2.5-coder is reliable with XML delimiters; prose-based prompts cause format drift |
-| 3-fallback response parser | Model frequently omits `<tool_call>` wrapper — bare JSON fallback keeps the agent running |
 | Temperature 0.15 | Structured output requires low temperature; higher values cause format and JSON breakage |
 | `num_predict: 8192` | 7b models produce longer reasoning chains than expected; prevents mid-thought truncation |
 | 24 576-token context cap | 32k model window minus 8k output headroom |
@@ -242,14 +319,14 @@ iaa run "my task" -m mistral:7b
 ## Development
 
 ```bash
-npm run build          # compile TypeScript → dist/
-npm run typecheck      # type-check without emitting
-npm test               # run test suite (Vitest)
-npm run dev -- run "task" -v   # run from source with tsx
-npm install -g .       # update global binary after build
+pnpm build             # compile TypeScript → dist/
+pnpm typecheck         # type-check without emitting
+pnpm test              # run test suite (Vitest)
+pnpm dev -- run "task" -v   # run from source with tsx
+pnpm add -g .          # update global binary after build
 ```
 
-After any source change: `npm run build && npm install -g .`
+After any source change: `pnpm build && pnpm add -g .`
 
 ---
 
@@ -261,7 +338,7 @@ This project is in early alpha. Issues and PRs are welcome.
 - **New tools** — follow the pattern in `src/tools/bash.ts`, open a PR with tests
 - **Provider support** — implement the `Provider` interface in `src/providers/`
 
-Please run `npm run build && npm test` before submitting a PR.
+Please run `pnpm build && pnpm test` before submitting a PR.
 
 ---
 
