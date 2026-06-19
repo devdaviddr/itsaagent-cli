@@ -2,18 +2,20 @@ import { Box, useApp, useInput } from "ink";
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { AgentRuntime } from "../../agent/AgentRuntime.js";
 import type { AgentDefinition } from "../../agent/AgentDefinition.js";
+import { getDefaultTools } from "../../tools/index.js";
 import { loadConfig, saveConfig } from "../config.js";
-import { parseChatInput, CHAT_HELP } from "../chatCommands.js";
+import { parseChatInput, matchCommands, CHAT_HELP } from "../chatCommands.js";
 import {
   conversationReducer,
   initialConversation,
 } from "./state/conversation.js";
-import { resolveTheme } from "./theme.js";
+import { resolveTheme, themeNames } from "./theme.js";
 import { useAgentEvents } from "./hooks/useAgentEvents.js";
 import { Header } from "./layout/Header.js";
 import { MessageLog } from "./layout/MessageLog.js";
 import { InputBox } from "./layout/InputBox.js";
 import { StatusLine } from "./layout/StatusLine.js";
+import { CommandPalette } from "./components/CommandPalette.js";
 import { entryHeight, windowEntries } from "./layout/viewport.js";
 import type { TuiMode } from "./layout/chrome.js";
 
@@ -40,18 +42,21 @@ function termDims(): { rows: number; cols: number } {
  * The persistent TUI: header, scrollable log, fixed input, status line. Owns one
  * AgentRuntime for the whole session — turns preserve context via continueChat().
  */
-export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName }: AppProps) {
+export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
   const { exit } = useApp();
-  const theme = resolveTheme(themeName);
 
   const [conv, dispatch] = useReducer(conversationReducer, undefined, initialConversation);
   const [mode, setMode] = useState<"idle" | "running">("idle");
   const [usage, setUsage] = useState<{ used: number; max: number; ratio: number } | null>(null);
   const [agentId, setAgentId] = useState(runtime.agentId);
   const [model, setModel] = useState(runtime.model);
+  const [themeName, setThemeName] = useState(initialThemeName);
   const [value, setValue] = useState("");
+  const [selectedToolId, setSelectedToolId] = useState<number | null>(null);
   const [dims, setDims] = useState(termDims());
   const firstRef = useRef(true);
+
+  const theme = resolveTheme(themeName);
 
   useEffect(() => {
     const onResize = (): void => setDims(termDims());
@@ -139,6 +144,37 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         dispatch({ type: "notice", text: `Model switched to ${cmd.name}.` });
         return;
       }
+      case "models": {
+        const { ok, models } = await runtime.checkProvider();
+        if (!ok) {
+          dispatch({ type: "error", text: "Provider unreachable." });
+          return;
+        }
+        dispatch({ type: "notice", text: `Models:\n${models.map((m) => `  ${m.name}`).join("\n")}` });
+        return;
+      }
+      case "theme": {
+        const names = themeNames();
+        if (!names.includes(cmd.name)) {
+          dispatch({
+            type: "error",
+            text: `Unknown theme "${cmd.name}". Available: ${names.join(", ")}`,
+          });
+          return;
+        }
+        const conf = await loadConfig();
+        await saveConfig({ ...conf, theme: cmd.name });
+        setThemeName(cmd.name);
+        dispatch({ type: "notice", text: `Theme switched to ${cmd.name}.` });
+        return;
+      }
+      case "tools": {
+        const list = getDefaultTools()
+          .map((t) => `  ${t.definition.name} — ${t.definition.description}`)
+          .join("\n");
+        dispatch({ type: "notice", text: `Tools:\n${list}` });
+        return;
+      }
       case "unknown":
         dispatch({ type: "error", text: `Unknown command "/${cmd.cmd}". Try /help.` });
         return;
@@ -151,9 +187,32 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const win = windowEntries(heights, logRows, conv.scrollOffset);
   const visible = conv.entries.slice(win.startIndex, win.endIndex);
 
+  const matches = matchCommands(value);
+  const toolIds = conv.entries.filter((e) => e.kind === "tool").map((e) => e.id);
+  const selected = selectedToolId ?? (toolIds.length > 0 ? toolIds[toolIds.length - 1] : null);
+
+  function moveSelection(dir: -1 | 1): void {
+    if (toolIds.length === 0) return;
+    const cur = selected ?? toolIds[toolIds.length - 1];
+    const idx = Math.min(toolIds.length - 1, Math.max(0, toolIds.indexOf(cur) + dir));
+    setSelectedToolId(toolIds[idx]);
+  }
+
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       exit();
+      return;
+    }
+    // Tab completes the highlighted slash command.
+    if (key.tab && matches.length > 0) {
+      const top = matches[0];
+      setValue(`/${top.name}${top.arg ? " " : ""}`);
+      return;
+    }
+    // Ctrl+R expands or collapses every tool block at once.
+    if (key.ctrl && input === "r") {
+      const anyCollapsed = conv.entries.some((e) => e.kind === "tool" && !e.expanded);
+      dispatch({ type: "toggleExpandAll", expanded: anyCollapsed });
       return;
     }
     if (key.pageUp) {
@@ -167,6 +226,22 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     if (key.escape) {
       dispatch({ type: "scrollToTail" });
       return;
+    }
+    // When the input line is empty, the arrow/enter keys drive tool-block focus
+    // instead of text editing (the text field has nothing to act on).
+    if (value === "") {
+      if (key.upArrow) {
+        moveSelection(-1);
+        return;
+      }
+      if (key.downArrow) {
+        moveSelection(1);
+        return;
+      }
+      if (key.return && selected !== null) {
+        dispatch({ type: "toggleExpand", id: selected });
+        return;
+      }
     }
   });
 
@@ -183,7 +258,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         theme={theme}
         width={contentWidth}
         live={mode === "running" && conv.following ? conv.live : ""}
+        focusedToolId={selected}
       />
+      {mode !== "running" ? <CommandPalette matches={matches} theme={theme} /> : null}
       <InputBox
         theme={theme}
         prompt={`${agentId} ›`}

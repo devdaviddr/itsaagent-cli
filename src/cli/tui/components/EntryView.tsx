@@ -1,25 +1,17 @@
 import { Box, Text } from "ink";
 import type { Entry } from "../state/conversation.js";
 import type { Theme } from "../theme.js";
-
-/** Compact one-line preview of tool args for the collapsed header. */
-function argSummary(args: Record<string, unknown>, width: number): string {
-  const json = JSON.stringify(args ?? {});
-  const flat = json.replace(/\s+/g, " ");
-  return flat.length > width ? flat.slice(0, Math.max(0, width - 1)) + "…" : flat;
-}
+import { ToolBlock } from "./ToolBlock.js";
 
 interface EntryViewProps {
   entry: Entry;
   theme: Theme;
   width: number;
+  focusedToolId?: number | null;
 }
 
-/**
- * Render a single conversation entry. Tool blocks get a richer, collapsible
- * treatment in F-03; this is the baseline themed rendering for the shell.
- */
-export function EntryView({ entry, theme, width }: EntryViewProps) {
+/** Render a single conversation entry; tool entries delegate to the collapsible ToolBlock. */
+export function EntryView({ entry, theme, width, focusedToolId }: EntryViewProps) {
   switch (entry.kind) {
     case "user":
       return (
@@ -68,31 +60,14 @@ export function EntryView({ entry, theme, width }: EntryViewProps) {
         </Box>
       );
 
-    case "tool": {
-      const icon =
-        entry.status === "running" ? "…" : entry.status === "success" ? "✓" : "✗";
-      const iconColor =
-        entry.status === "running"
-          ? theme.warning
-          : entry.status === "success"
-            ? theme.success
-            : theme.error;
+    case "tool":
       return (
-        <Box flexDirection="column">
-          <Box>
-            <Text color={theme.toolName}>▸ {entry.name} </Text>
-            <Text color={theme.muted}>{argSummary(entry.args, Math.max(10, width - entry.name.length - 6))}</Text>
-            <Text color={iconColor}> {icon}</Text>
-          </Box>
-          {entry.expanded && entry.result ? (
-            <Box marginLeft={2}>
-              <Text color={theme.muted} wrap="wrap">
-                {entry.result.success ? entry.result.data : entry.result.error || entry.result.data}
-              </Text>
-            </Box>
-          ) : null}
-        </Box>
+        <ToolBlock
+          entry={entry}
+          theme={theme}
+          width={width}
+          focused={entry.id === focusedToolId}
+        />
       );
-    }
   }
 }
