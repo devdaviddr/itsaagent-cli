@@ -162,6 +162,9 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
   private async runLoop(startTime: number): Promise<string> {
     const callCounts = new Map<string, number>();
+    const recencyWindow: string[] = []; // last N tool names
+    const failureCounts = new Map<string, number>(); // consecutive failures per tool
+    let lastNudgeStep = -10;
     const useTools = this.toolUseMode === true;
     const toolSpecs = useTools ? this.toolSpecs() : undefined;
 
@@ -233,6 +236,39 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
       await this.logger.logStep(step, parsed.thought, name, args, result);
       this.ctx.add({ role: "user", content: formatToolResult(name, args, result) });
+
+      // --- Failure escalation: consecutive failures of the same tool ---
+      if (!result.success) {
+        const fails = (failureCounts.get(name) ?? 0) + 1;
+        failureCounts.set(name, fails);
+        if (fails >= 3) {
+          const err = new LoopDetectedError(name);
+          const msg = `Tool ${name} failed 3 times consecutively`;
+          this.emit("error", { error: err, stepIndex: step });
+          await this.logger.logError(msg);
+          return msg;
+        }
+        if (fails === 2) {
+          this.ctx.add({
+            role: "user",
+            content: `[AGENT NOTICE: ${name} has failed twice in a row. Before trying again, state explicitly why the previous attempts failed and what you will do differently.]`,
+          });
+        }
+      } else {
+        failureCounts.set(name, 0); // reset streak on success
+      }
+
+      // --- Recency-window loop detection (semantic loop nudge) ---
+      recencyWindow.push(name);
+      if (recencyWindow.length > 8) recencyWindow.shift();
+      const sameToolCount = recencyWindow.filter((n) => n === name).length;
+      if (sameToolCount >= 5 && step - lastNudgeStep >= 4) {
+        lastNudgeStep = step;
+        this.ctx.add({
+          role: "user",
+          content: `[AGENT NOTICE: You have called ${name} ${sameToolCount} times recently. Do you have enough information to proceed, or are you stuck? State what you are looking for before calling another tool.]`,
+        });
+      }
     }
 
     const err = new MaxStepsError(this.config.maxSteps);
