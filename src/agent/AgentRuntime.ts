@@ -36,12 +36,12 @@ function formatToolResult(tool: string, args: Record<string, unknown>, result: T
 
 export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private readonly config: AgentConfig;
-  private readonly provider: Provider;
+  private provider: Provider;
   private readonly ctx: ContextManager;
   private readonly tools: Map<string, Tool>;
   private readonly logger: SessionLogger;
-  private readonly agent?: AgentDefinition;
-  /** Cached native-tool-use capability of the active model (detected once). */
+  private agent?: AgentDefinition;
+  /** Cached native-tool-use capability of the active model (detected once per model). */
   private toolUseMode: boolean | undefined;
 
   constructor(config: AgentConfig) {
@@ -69,6 +69,24 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
   /** Expose verbose flag so output layer can read it without a private cast */
   get verbose(): boolean { return this.config.verbose; }
+
+  /** Active agent id (or "default" when unscoped). */
+  get agentId(): string { return this.agent?.id ?? "default"; }
+
+  /** Active model name. */
+  get model(): string { return this.config.provider.model; }
+
+  /** Switch the active agent. Re-scopes permitted tools; the next initSession() rebuilds the prompt. */
+  setAgent(def: AgentDefinition): void {
+    this.agent = def;
+  }
+
+  /** Switch the model. Recreates the provider; tool-use capability is re-detected on the next run. */
+  setModel(model: string): void {
+    this.config.provider.model = model;
+    this.provider = createProvider(this.config.provider);
+    this.toolUseMode = undefined;
+  }
 
   /** True if the active agent permits calling the named tool. */
   private isToolPermitted(name: string): boolean {

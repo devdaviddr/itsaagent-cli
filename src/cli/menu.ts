@@ -8,6 +8,7 @@ import { loadSkills } from "../agent/SkillLoader.js";
 import { getDefaultTools } from "../tools/index.js";
 import { formatToolDetail } from "./commands/tools.js";
 import { runAgent } from "./output.js";
+import { runChatSession } from "./chatSession.js";
 import {
   statusHeader,
   agentPickerOptions,
@@ -52,17 +53,7 @@ async function chatFlow(agentId: string): Promise<void> {
   const runtime = new AgentRuntime(await toAgentConfig(conf, { agent: agentId }));
   const { ok } = await runtime.checkProvider();
   if (!ok) { console.error(chalk.red(`Cannot reach ${conf.providerType} at ${conf.host}`)); return; }
-  console.error(chalk.dim(`  ${agentId} agent · /exit to return to the menu\n`));
-  runtime.initSession();
-  let first = true;
-  while (true) {
-    const input = await text({ message: `${agentId} ›` });
-    if (isCancel(input) || input === "/exit") break;
-    if (!input || typeof input !== "string") continue;
-    const answer = await runAgent(runtime, input, !first);
-    first = false;
-    console.log(`\n${answer}\n`);
-  }
+  await runChatSession(runtime);
 }
 
 /** Agent picker. Returns the chosen id, or undefined on Back/cancel. */

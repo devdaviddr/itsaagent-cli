@@ -115,3 +115,29 @@ describe("Agent system prompt scoping", () => {
     expect(prompt).toContain("### read_file");
   });
 });
+
+describe("Runtime agent/model switching (M-03)", () => {
+  it("agentId and model getters reflect the active config", () => {
+    const build = new AgentRegistry().get("build")!;
+    const runtime = new AgentRuntime(makeConfig(build));
+    expect(runtime.agentId).toBe("build");
+    expect(runtime.model).toBe("test");
+  });
+
+  it("setModel changes the active model", () => {
+    const runtime = new AgentRuntime(makeConfig());
+    runtime.setModel("other-model:7b");
+    expect(runtime.model).toBe("other-model:7b");
+  });
+
+  it("setAgent re-scopes permitted tools — switching build→plan blocks bash", async () => {
+    const registry = new AgentRegistry();
+    const runtime = new AgentRuntime(makeConfig(registry.get("build")!));
+    runtime.setAgent(registry.get("plan")!);
+    withSingleToolCall(runtime, "bash");
+    const errors: (string | undefined)[] = [];
+    runtime.on("tool:result", ({ result }) => errors.push(result.error));
+    await runtime.run("try bash");
+    expect(errors).toContain("Tool not permitted by active agent");
+  });
+});

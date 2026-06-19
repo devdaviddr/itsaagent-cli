@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - (M-05) Home menu status header — shows `agent · model · provider · host`, with a ⚡ marker when the active model supports native tool use; updates after changes.
 - (M-06) Home menu model picker — `Model: <name>` item lists live provider models and persists the choice.
 - (M-04) Consistent back navigation — every sub-menu has a "← Back" item; Esc goes back in sub-menus and quits at the home menu.
+- (M-03) In-chat slash commands — `/agent <name>` (switch agent, resets context), `/agents`, `/model <name>` (switch + persist), `/help`, plus existing `/clear` and `/exit`. The chat prompt shows the active agent. `AgentRuntime` gained `setAgent()` / `setModel()`.
 
 ### Fixed
 - Conversational input (greetings, small talk, questions answerable from knowledge) is now answered directly instead of triggering tool use — fixes `iaa chat` running `bash` for "hello". Added a prompt rule against interactive commands (`read`, editors) that have no stdin.

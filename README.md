@@ -68,14 +68,28 @@ iaa
 ## CLI reference
 
 ```
-iaa                  Interactive home menu (no arguments, in a terminal)
+iaa                  Interactive home menu (pick agent/model, browse tools, run, chat)
 iaa run <task...>    Execute a one-shot task (prefix /skill-name to run a skill)
-iaa chat             Interactive multi-turn session (keeps context; /clear, /exit)
+iaa chat             Interactive multi-turn session (keeps context; slash commands below)
 iaa agents           List available agents and their tool access
+iaa tools [name]     List built-in tools, or show full detail for one
 iaa skills           List installed skills
 iaa models           List available Ollama models
 iaa check            Verify Ollama, model availability, and native tool-use support
 iaa config           View or update persistent config
+```
+
+### Chat slash commands
+
+Inside `iaa chat` (or the menu's Chat):
+
+```
+/agent <name>   switch agent (resets context)
+/agents         list available agents
+/model <name>   switch model (persists to config)
+/clear          reset the conversation
+/help           show available commands
+/exit           leave chat
 ```
 
 ### Flags
