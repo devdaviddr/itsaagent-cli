@@ -50,10 +50,10 @@ npm run build
 npm install -g .
 
 # Verify everything is connected
-ai check
+iaa check
 
 # Run a task
-ai run "list typescript files in this project and count lines of code" -v
+iaa run "list typescript files in this project and count lines of code" -v
 ```
 
 ---
@@ -61,11 +61,11 @@ ai run "list typescript files in this project and count lines of code" -v
 ## CLI reference
 
 ```
-ai run <task>       Execute a one-shot task
-ai chat             Interactive multi-turn session
-ai models           List available Ollama models
-ai check            Verify Ollama connection and model availability
-ai config           View or update persistent config
+iaa run <task>       Execute a one-shot task
+iaa chat             Interactive multi-turn session
+iaa models           List available Ollama models
+iaa check            Verify Ollama connection and model availability
+iaa config           View or update persistent config
 ```
 
 ### Flags
@@ -81,9 +81,9 @@ ai config           View or update persistent config
 ### Persistent config
 
 ```bash
-ai config --set-model qwen2.5-coder:7b
-ai config --set-max-steps 40
-ai config --set-log-dir ~/my-agent-logs
+iaa config --set-model qwen2.5-coder:7b
+iaa config --set-max-steps 40
+iaa config --set-log-dir ~/my-agent-logs
 ```
 
 Config stored at `~/.config/ai-cli/config.json`.
@@ -174,10 +174,10 @@ Config stored at `~/.config/ai-cli/config.json`.
 
 ```bash
 # Password auth (reads SSH_PASS env var)
-SSH_PASS="yourpassword" ai run "ssh into 192.168.1.50 as dan and show disk usage" -v
+SSH_PASS="yourpassword" iaa run "ssh into 192.168.1.50 as dan and show disk usage" -v
 
 # Wake a sleeping machine, then connect
-ai run "ssh into 192.168.1.50 as dan — wake MAC is aa:bb:cc:dd:ee:ff — run docker ps" -v
+iaa run "ssh into 192.168.1.50 as dan — wake MAC is aa:bb:cc:dd:ee:ff — run docker ps" -v
 ```
 
 ### Adding a custom tool
@@ -232,9 +232,9 @@ The primary target is `qwen2.5-coder:7b` on Ollama. Several design decisions exi
 Works well with `mistral:7b` and other instruction-tuned Ollama models. Switch model with:
 
 ```bash
-ai config --set-model mistral:7b
+iaa config --set-model mistral:7b
 # or per-run:
-ai run "my task" -m mistral:7b
+iaa run "my task" -m mistral:7b
 ```
 
 ---

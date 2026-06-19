@@ -1,10 +1,10 @@
 {
   "name": "itsaagent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ItsAAgent — Ollama-optimised ReAct agent for the CLI. Think, plan, execute on local hardware.",
   "type": "module",
   "bin": {
-    "ai": "dist/index.js"
+    "iaa": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

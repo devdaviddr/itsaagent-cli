@@ -19,9 +19,9 @@ After any source change: `npm run build && npm install -g .`
 
 Manual test cycle:
 ```bash
-ai check                              # verify Ollama + model
-ai run "your task" -v                 # verbose: shows thought/tool/result each step
-ai run "your task" -l                 # silent run with session log written to disk
+iaa check                              # verify Ollama + model
+iaa run "your task" -v                 # verbose: shows thought/tool/result each step
+iaa run "your task" -l                 # silent run with session log written to disk
 ```
 
 ## Architecture
@@ -139,7 +139,7 @@ When writing or modifying system prompts:
 
 ## Config
 
-`~/.config/ai-cli/config.json` — managed via `ai config` subcommand.
+`~/.config/ai-cli/config.json` — managed via `iaa config` subcommand.
 
 ```json
 {
@@ -151,7 +151,7 @@ When writing or modifying system prompts:
 }
 ```
 
-`logDir` is used by `SessionLogger` when `-v` or `-l` is passed. Set via `ai config --set-log-dir <path>`.
+`logDir` is used by `SessionLogger` when `-v` or `-l` is passed. Set via `iaa config --set-log-dir <path>`.
 
 ## Git branching strategy
 

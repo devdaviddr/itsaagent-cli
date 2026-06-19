@@ -10,9 +10,9 @@ import { registerRunCommand } from "./cli/commands/run.js";
 const program = new Command();
 
 program
-  .name("ai")
+  .name("iaa")
   .description("ItsAAgent — Ollama-optimised ReAct agent for the CLI")
-  .version("0.1.0")
+  .version("0.2.0")
   .option("-v, --verbose", "Show agent reasoning, tool calls, and stream output live")
   .option("-l, --log", "Write session log to disk (auto-enabled with -v)")
   .option("-m, --model <model>", "Override the model for this run")
