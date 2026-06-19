@@ -5,6 +5,7 @@ import type { AgentRuntime } from "../../agent/AgentRuntime.js";
 import type { StepRecord, StepStatus, ToolResult } from "../../types.js";
 import { StepView } from "./StepView.js";
 import { Spinner } from "./Spinner.js";
+import { buildBar, formatUsage } from "../contextBar.js";
 
 interface AgentViewState {
   status: "running" | "done" | "error";
@@ -17,6 +18,9 @@ interface AgentViewState {
   currentChunk: string;
   answer: string;
   errorMessage: string;
+  ctxUsed: number;
+  ctxMax: number;
+  ctxRatio: number;
 }
 
 function updateStep(
@@ -50,6 +54,9 @@ export function AgentView({ runtime, task, continueChat = false, onDone, onError
     currentChunk: "",
     answer: "",
     errorMessage: "",
+    ctxUsed: 0,
+    ctxMax: 0,
+    ctxRatio: 0,
   });
 
   useEffect(() => {
@@ -108,6 +115,10 @@ export function AgentView({ runtime, task, continueChat = false, onDone, onError
       }));
     });
 
+    on("context:usage", ({ used, max, ratio }: { used: number; max: number; ratio: number }) => {
+      setState((s) => ({ ...s, ctxUsed: used, ctxMax: max, ctxRatio: ratio }));
+    });
+
     on("answer", ({ text }: { text: string }) => {
       setState((s) => ({ ...s, status: "done", answer: text, currentChunk: "" }));
       onDone(text);
@@ -138,12 +149,23 @@ export function AgentView({ runtime, task, continueChat = false, onDone, onError
   const completedSteps = state.steps.filter((s) => s.status === "done" || s.status === "error");
   const activeStep = state.steps.find((s) => s.status === "thinking" || s.status === "executing");
 
+  const ctxColor =
+    state.ctxRatio > 80 ? "red" : state.ctxRatio >= 60 ? "yellow" : undefined;
+
   return (
     <Box flexDirection="column" padding={1}>
       <Box marginBottom={1}>
         <Text bold>ItsAAgent</Text>
         {state.model ? <Text dimColor>  {state.model}  ·  {state.cwd}</Text> : null}
       </Box>
+
+      {state.ctxMax > 0 ? (
+        <Box marginBottom={1}>
+          <Text color={ctxColor} dimColor={ctxColor === undefined}>
+            ctx  [{buildBar(state.ctxRatio)}]  {formatUsage(state.ctxUsed, state.ctxMax, state.ctxRatio)}
+          </Text>
+        </Box>
+      ) : null}
 
       <Box marginBottom={1}>
         <Text dimColor>Task: </Text>

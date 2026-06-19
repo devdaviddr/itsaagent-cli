@@ -8,10 +8,16 @@ export class ContextManager {
   /** Cumulative count of messages evicted since the last clear(). */
   private evictedTotal = 0;
   private onEvict?: (count: number) => void;
+  private onUsage?: (usage: { total: number; max: number; ratio: number }) => void;
 
-  constructor(maxTokens: number, onEvict?: (count: number) => void) {
+  constructor(
+    maxTokens: number,
+    onEvict?: (count: number) => void,
+    onUsage?: (usage: { total: number; max: number; ratio: number }) => void,
+  ) {
     this.maxTokens = maxTokens;
     this.onEvict = onEvict;
+    this.onUsage = onUsage;
   }
 
   add(msg: Omit<Message, "timestamp">): void {
@@ -22,6 +28,7 @@ export class ContextManager {
       this.upsertNotice();
       this.onEvict?.(evicted);
     }
+    this.onUsage?.(this.usage());
   }
 
   get(): Message[] {

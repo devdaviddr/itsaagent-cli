@@ -107,4 +107,19 @@ describe("AgentRuntime", () => {
     expect(r1.verbose).toBe(true);
     expect(r2.verbose).toBe(false);
   });
+
+  it("emits context:usage with sane values during a run", async () => {
+    const runtime = new AgentRuntime(makeConfig());
+    (runtime as unknown as { provider: unknown }).provider = makeMockProvider([
+      "<answer>done</answer>",
+    ]);
+    const usages: Array<{ used: number; max: number; ratio: number }> = [];
+    runtime.on("context:usage", (u) => usages.push(u));
+    await runtime.run("hello");
+    expect(usages.length).toBeGreaterThan(0);
+    const last = usages[usages.length - 1];
+    expect(last.max).toBe(8192);
+    expect(last.used).toBeGreaterThan(0);
+    expect(last.ratio).toBeGreaterThanOrEqual(0);
+  });
 });

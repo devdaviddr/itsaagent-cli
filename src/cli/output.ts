@@ -1,7 +1,17 @@
 import chalk from "chalk";
 import type { AgentRuntime } from "../agent/AgentRuntime.js";
+import { contextLine, usageLevel } from "./contextBar.js";
 
 const isTTY = Boolean(process.stdout.isTTY && process.stderr.isTTY);
+
+/** Colour the context indicator line by usage level. */
+function colourContextLine(used: number, max: number, ratio: number): string {
+  const line = contextLine(used, max, ratio);
+  const level = usageLevel(ratio);
+  if (level === "high") return chalk.red(line);
+  if (level === "mid") return chalk.yellow(line);
+  return chalk.dim(line);
+}
 
 export async function runAgent(runtime: AgentRuntime, task: string, continueChat = false): Promise<string> {
   return isTTY ? renderWithInk(runtime, task, continueChat) : renderPlain(runtime, task, continueChat);
@@ -30,6 +40,15 @@ async function renderWithInk(runtime: AgentRuntime, task: string, continueChat: 
 async function renderPlain(runtime: AgentRuntime, task: string, continueChat: boolean): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const verbose = runtime.verbose;
+    let lastUsage: { used: number; max: number; ratio: number } | undefined;
+
+    runtime.on("context:usage", (u) => {
+      lastUsage = u;
+      // High-usage warning during the run (verbose only, to avoid noise).
+      if (verbose && u.ratio >= 80) {
+        console.error(colourContextLine(u.used, u.max, u.ratio));
+      }
+    });
 
     if (verbose) {
       runtime.on("start", ({ model, cwd, logPath }) => {
@@ -63,7 +82,13 @@ async function renderPlain(runtime: AgentRuntime, task: string, continueChat: bo
       });
     }
 
-    runtime.on("answer", ({ text }) => resolve(text));
+    runtime.on("answer", ({ text }) => {
+      // Surface context fullness after a response when it's worth knowing.
+      if (lastUsage && lastUsage.ratio >= 60) {
+        console.error(colourContextLine(lastUsage.used, lastUsage.max, lastUsage.ratio));
+      }
+      resolve(text);
+    });
     runtime.on("error", ({ error }) => resolve(error.message));
 
     if (continueChat) {
