@@ -153,6 +153,8 @@ When writing or modifying system prompts:
 
 This project uses **GitHub Flow** — simple, trunk-based, always-releasable `main`.
 
+**Direct commits to `main` are blocked** by a tracked `pre-commit` hook (`.githooks/pre-commit`, enabled via `core.hooksPath`, wired by the `prepare` script). All changes — features, fixes, and releases (version bump + changelog) — go on a branch and merge. Bypass only if you truly must: `git commit --no-verify`.
+
 ### Branch naming
 
 | Prefix | Purpose | Example |
