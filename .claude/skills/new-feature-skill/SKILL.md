@@ -1,6 +1,6 @@
 ---
-name: sdd
-description: Enforce Spec-Driven Development for any non-trivial change in this repo — spec first (with semver versioning), then plan, branch, build to the spec, test, update docs/CHANGELOG/README, merge to main, and tag if it is a release. Trigger when starting a feature, fix, or refactor; when the user says "spec this", "SDD", "new feature/change", or asks to plan or version a change. Skip only for truly trivial one-liners.
+name: new-feature-skill
+description: Enforce Spec-Driven Development for any non-trivial change in this repo — spec first (with semver versioning), then plan, branch, build to the spec, test, update docs/CHANGELOG/README, merge to main, and tag if it is a release. Trigger when starting a feature, fix, or refactor; when the user says "new feature", "spec this", "SDD", or asks to plan or version a change. Skip only for truly trivial one-liners.
 ---
 
 # Spec-Driven Development (SDD)
