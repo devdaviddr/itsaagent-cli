@@ -20,6 +20,19 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Do not retry with minor variations");
   });
 
+  it("tells the model to answer conversational input directly (rule 11)", () => {
+    const prompt = buildSystemPrompt(tools, "/tmp");
+    expect(prompt).toContain("11.");
+    expect(prompt).toMatch(/greetings|small talk/i);
+    expect(prompt).toContain("do NOT call a tool");
+  });
+
+  it("warns that commands run non-interactively (rule 12)", () => {
+    const prompt = buildSystemPrompt(tools, "/tmp");
+    expect(prompt).toContain("12.");
+    expect(prompt).toMatch(/non-interactively|no stdin/i);
+  });
+
   it("appends an agent suffix after the rules block when provided", () => {
     const prompt = buildSystemPrompt(tools, "/tmp", "## Plan Agent\nread-only");
     expect(prompt).toContain("## Plan Agent");

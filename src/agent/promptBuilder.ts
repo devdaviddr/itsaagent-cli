@@ -23,6 +23,7 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
   const base = [
     `You are an AI agent that completes tasks by running tools step by step.`,
     `Follow the ReAct pattern: Thought → Action → Observation → Thought → …`,
+    `If the user is just making conversation or asking something you already know, simply reply — you do not have to use a tool for everything.`,
     ``,
     `## Available Tools`,
     buildToolDescriptions(tools),
@@ -56,6 +57,8 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `8. Never repeat the same tool call with the same arguments`,
     `9. Before reading a file of unknown size, run \`wc -l <path>\` first. If it exceeds 300 lines, use read_file with start_line and end_line (1-indexed, inclusive) to read only the relevant section`,
     `10. If the same approach fails twice, STOP and state explicitly: (a) why the previous attempts failed, and (b) what is fundamentally different about your next approach. Do not retry with minor variations`,
+    `11. For greetings, small talk, or questions you can answer from your own knowledge, respond immediately with <answer>…</answer> and do NOT call a tool. Only use tools when the request actually requires reading files, running commands, or touching the system`,
+    `12. Commands run non-interactively with no stdin. Never use interactive commands (read, prompts, passwd, editors like vi/nano). If input is needed, pass it as flags or via a here-string`,
   ].join("\n");
 
   let prompt = agentSuffix ? `${base}\n\n${agentSuffix}` : base;
