@@ -16,6 +16,8 @@ export interface CliConfig {
   maxSteps: number;
   maxContextTokens: number;
   logDir: string;
+  /** TUI theme name (see src/cli/tui/theme.ts). Optional; unknown/unset → default. */
+  theme?: string;
 }
 
 export function defaultConfig(): CliConfig {
