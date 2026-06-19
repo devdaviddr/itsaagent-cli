@@ -22,7 +22,10 @@ export function registerChatCommand(program: Command): void {
       }
 
       intro(`ItsAAgent · ${agentConfig.provider.model}`);
-      console.error(chalk.dim("  /exit to quit\n"));
+      console.error(chalk.dim("  /exit to quit  /clear to reset context\n"));
+
+      runtime.initSession();
+      let isFirst = true;
 
       while (true) {
         const input = await text({ message: ">" });
@@ -32,9 +35,22 @@ export function registerChatCommand(program: Command): void {
           break;
         }
 
+        if (input === "/clear") {
+          runtime.initSession();
+          isFirst = true;
+          console.error(chalk.dim("  Context cleared.\n"));
+          continue;
+        }
+
         if (!input || typeof input !== "string") continue;
 
-        const answer = await runAgent(runtime, input);
+        let answer: string;
+        if (isFirst) {
+          answer = await runAgent(runtime, input);
+          isFirst = false;
+        } else {
+          answer = await runAgent(runtime, input, true);
+        }
         console.log(`\n${answer}\n`);
       }
     });

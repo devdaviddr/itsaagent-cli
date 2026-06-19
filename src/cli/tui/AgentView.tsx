@@ -32,11 +32,12 @@ function updateStep(
 interface AgentViewProps {
   runtime: AgentRuntime;
   task: string;
+  continueChat?: boolean;
   onDone: (answer: string) => void;
   onError: (message: string) => void;
 }
 
-export function AgentView({ runtime, task, onDone, onError }: AgentViewProps) {
+export function AgentView({ runtime, task, continueChat = false, onDone, onError }: AgentViewProps) {
   const { exit } = useApp();
   const [state, setState] = useState<AgentViewState>({
     status: "running",
@@ -120,7 +121,8 @@ export function AgentView({ runtime, task, onDone, onError }: AgentViewProps) {
     });
 
     // Start the run AFTER all listeners are attached
-    runtime.run(task).catch((err: unknown) => {
+    const invoke = continueChat ? runtime.continueChat(task) : runtime.run(task);
+    invoke.catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       onError(msg);
       exit();

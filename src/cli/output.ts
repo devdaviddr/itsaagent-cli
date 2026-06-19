@@ -3,24 +3,23 @@ import type { AgentRuntime } from "../agent/AgentRuntime.js";
 
 const isTTY = Boolean(process.stdout.isTTY && process.stderr.isTTY);
 
-export async function runAgent(runtime: AgentRuntime, task: string): Promise<string> {
-  return isTTY ? renderWithInk(runtime, task) : renderPlain(runtime, task);
+export async function runAgent(runtime: AgentRuntime, task: string, continueChat = false): Promise<string> {
+  return isTTY ? renderWithInk(runtime, task, continueChat) : renderPlain(runtime, task, continueChat);
 }
 
-async function renderWithInk(runtime: AgentRuntime, task: string): Promise<string> {
+async function renderWithInk(runtime: AgentRuntime, task: string, continueChat: boolean): Promise<string> {
   const { render } = await import("ink");
   const { createElement } = await import("react");
   const { AgentView } = await import("./tui/AgentView.js");
 
   return new Promise<string>((resolve, reject) => {
-    // AgentView registers all listeners and calls runtime.run() inside its own useEffect,
-    // so there is no race between event emission and listener registration.
     const { waitUntilExit } = render(
       createElement(AgentView, {
         runtime,
         task,
+        continueChat,
         onDone: resolve,
-        onError: resolve,  // error already shown in TUI; resolve so process exits cleanly
+        onError: resolve,
       }),
     );
 
@@ -28,7 +27,7 @@ async function renderWithInk(runtime: AgentRuntime, task: string): Promise<strin
   });
 }
 
-async function renderPlain(runtime: AgentRuntime, task: string): Promise<string> {
+async function renderPlain(runtime: AgentRuntime, task: string, continueChat: boolean): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const verbose = runtime.verbose;
 
@@ -63,6 +62,10 @@ async function renderPlain(runtime: AgentRuntime, task: string): Promise<string>
     runtime.on("answer", ({ text }) => resolve(text));
     runtime.on("error", ({ error }) => resolve(error.message));
 
-    runtime.run(task).catch(reject);
+    if (continueChat) {
+      runtime.continueChat(task).catch(reject);
+    } else {
+      runtime.run(task).catch(reject);
+    }
   });
 }

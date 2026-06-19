@@ -71,6 +71,25 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     }
   }
 
+  /** Initialise a persistent chat session. Call once before continueChat(). */
+  initSession(): void {
+    const cwd = process.cwd();
+    this.ctx.clear();
+    this.ctx.add({ role: "system", content: buildSystemPrompt([...this.tools.values()], cwd) });
+  }
+
+  /**
+   * Continue an existing chat session with a new user message.
+   * Context from previous turns is preserved. Call initSession() first.
+   */
+  async continueChat(task: string): Promise<string> {
+    const startTime = Date.now();
+    this.ctx.add({ role: "user", content: task });
+    await this.logger.init(task, this.config.provider.model, process.cwd());
+    this.emit("start", { task, model: this.config.provider.model, cwd: process.cwd(), logPath: this.logger.filePath });
+    return this.runLoop(startTime);
+  }
+
   async run(task: string): Promise<string> {
     const cwd = process.cwd();
     const startTime = Date.now();
@@ -81,7 +100,10 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
     await this.logger.init(task, this.config.provider.model, cwd);
     this.emit("start", { task, model: this.config.provider.model, cwd, logPath: this.logger.filePath });
+    return this.runLoop(startTime);
+  }
 
+  private async runLoop(startTime: number): Promise<string> {
     const callCounts = new Map<string, number>();
 
     for (let step = 1; step <= this.config.maxSteps; step++) {
