@@ -180,12 +180,12 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       }
 
       // Native tool-use: structure comes from the API, so parseResponse is skipped.
-      // Falls through to the text parser when the model returns no tool_calls.
+      // When there are no structured tool_calls (even a tool-capable model may emit
+      // a text tool call because the prompt describes that format), fall back to the
+      // text parser so those calls are still honoured.
       let parsed: ParsedResponse;
       if (useTools && nativeCalls && nativeCalls.length > 0) {
         parsed = { thought: raw.trim() || undefined, toolCall: nativeCalls[0], isExplicitAnswer: false };
-      } else if (useTools) {
-        parsed = { answer: raw.trim(), isExplicitAnswer: true };
       } else {
         parsed = parseResponse(raw);
       }
