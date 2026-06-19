@@ -3,6 +3,8 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { AgentRuntime } from "../../agent/AgentRuntime.js";
 import { loadConfig, toAgentConfig } from "../config.js";
+import { isInteractiveTTY } from "../output.js";
+import { launchTui } from "../tui/launch.js";
 import { resolveCliSkills } from "../skillResolve.js";
 import { runChatSession } from "../chatSession.js";
 
@@ -36,6 +38,12 @@ export function registerChatCommand(program: Command): void {
       if (!ok) {
         console.error(chalk.red(`Cannot reach ${conf.providerType} at ${conf.host}`));
         process.exit(1);
+      }
+
+      // The persistent TUI needs a real terminal; fall back to the plain REPL when piped.
+      if (isInteractiveTTY()) {
+        await launchTui({ runtime, providerOk: ok, themeName: conf.theme });
+        return;
       }
 
       intro(`ItsAAgent · ${agentConfig.provider.model}`);

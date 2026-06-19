@@ -4,6 +4,23 @@ import { contextLine, usageLevel } from "./contextBar.js";
 
 const isTTY = Boolean(process.stdout.isTTY && process.stderr.isTTY);
 
+/** True when both streams are TTYs and the persistent TUI can render. */
+export function isInteractiveTTY(): boolean {
+  return isTTY;
+}
+
+export type RenderMode = "interactive" | "oneshot" | "plain";
+
+/**
+ * Decide how a `run` invocation should render. Non-TTY always falls back to the
+ * plain renderer; an interactive TTY uses the persistent TUI only when opted in
+ * (e.g. `iaa run -i`), otherwise the legacy one-shot view. Pure for testing.
+ */
+export function selectRenderMode(opts: { isTTY: boolean; interactive: boolean }): RenderMode {
+  if (!opts.isTTY) return "plain";
+  return opts.interactive ? "interactive" : "oneshot";
+}
+
 /** Colour the context indicator line by usage level. */
 function colourContextLine(used: number, max: number, ratio: number): string {
   const line = contextLine(used, max, ratio);

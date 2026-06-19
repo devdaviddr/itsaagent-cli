@@ -9,7 +9,8 @@ import { registerModelsCommand } from "./cli/commands/models.js";
 import { registerRunCommand } from "./cli/commands/run.js";
 import { registerSkillsCommand } from "./cli/commands/skills.js";
 import { registerToolsCommand } from "./cli/commands/tools.js";
-import { shouldShowMenu, showHomeMenu } from "./cli/menu.js";
+import { shouldShowMenu } from "./cli/menu.js";
+import { launchHomeTui } from "./cli/tui/launch.js";
 
 const program = new Command();
 
@@ -38,7 +39,7 @@ registerCheckCommand(program);
 registerConfigCommand(program);
 
 if (shouldShowMenu(process.argv, Boolean(process.stdout.isTTY))) {
-  showHomeMenu().catch((err: unknown) => {
+  launchHomeTui().catch((err: unknown) => {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   });
