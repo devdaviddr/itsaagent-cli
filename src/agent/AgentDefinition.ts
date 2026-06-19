@@ -37,6 +37,13 @@ export const MUTATION_TOOLS: ReadonlySet<string> = new Set([
   "ssh_download",
 ]);
 
+/** Whether an agent is allowed to call a tool by name (single source of truth). */
+export function agentPermitsTool(agent: AgentDefinition, toolName: string): boolean {
+  if (agent.readonly && MUTATION_TOOLS.has(toolName)) return false;
+  if (agent.tools === "all") return true;
+  return agent.tools.includes(toolName);
+}
+
 /** IDs reserved by built-in agents — user agents may not reuse them. */
 export const BUILTIN_AGENT_IDS: ReadonlySet<string> = new Set(["build", "plan", "cli"]);
 

@@ -8,6 +8,7 @@ import { registerConfigCommand } from "./cli/commands/config.js";
 import { registerModelsCommand } from "./cli/commands/models.js";
 import { registerRunCommand } from "./cli/commands/run.js";
 import { registerSkillsCommand } from "./cli/commands/skills.js";
+import { registerToolsCommand } from "./cli/commands/tools.js";
 import { shouldShowMenu, showHomeMenu } from "./cli/menu.js";
 
 const program = new Command();
@@ -31,6 +32,7 @@ registerRunCommand(program);
 registerChatCommand(program);
 registerAgentsCommand(program);
 registerSkillsCommand(program);
+registerToolsCommand(program);
 registerModelsCommand(program);
 registerCheckCommand(program);
 registerConfigCommand(program);

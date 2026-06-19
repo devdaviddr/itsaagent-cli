@@ -9,7 +9,7 @@ import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
 import { parseResponse, stableKey, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
-import { MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
+import { agentPermitsTool, type AgentDefinition } from "./AgentDefinition.js";
 
 export interface AgentRuntimeEvents {
   start: [payload: { task: string; model: string; cwd: string; logPath: string }];
@@ -73,9 +73,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   /** True if the active agent permits calling the named tool. */
   private isToolPermitted(name: string): boolean {
     if (!this.agent) return true; // no agent = unrestricted (back-compat)
-    if (this.agent.readonly && MUTATION_TOOLS.has(name)) return false;
-    if (this.agent.tools === "all") return true;
-    return this.agent.tools.includes(name);
+    return agentPermitsTool(this.agent, name);
   }
 
   /** Registered tools the active agent is allowed to see and call. */

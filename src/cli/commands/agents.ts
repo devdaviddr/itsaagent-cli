@@ -1,14 +1,12 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { AgentRegistry } from "../../agent/AgentRegistry.js";
-import { MUTATION_TOOLS, BUILTIN_AGENT_IDS, type AgentDefinition } from "../../agent/AgentDefinition.js";
+import { agentPermitsTool, BUILTIN_AGENT_IDS, type AgentDefinition } from "../../agent/AgentDefinition.js";
 import { getDefaultTools } from "../../tools/index.js";
 
 /** Tool names this agent can actually call, given the registered tool set. */
 function effectiveTools(agent: AgentDefinition, registered: string[]): string[] {
-  let names = agent.tools === "all" ? [...registered] : agent.tools.filter((t) => registered.includes(t));
-  if (agent.readonly) names = names.filter((t) => !MUTATION_TOOLS.has(t));
-  return names;
+  return registered.filter((t) => agentPermitsTool(agent, t));
 }
 
 export function registerAgentsCommand(program: Command): void {

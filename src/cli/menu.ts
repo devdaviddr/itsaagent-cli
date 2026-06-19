@@ -5,6 +5,8 @@ import { AgentRuntime } from "../agent/AgentRuntime.js";
 import { AgentRegistry } from "../agent/AgentRegistry.js";
 import { BUILTIN_AGENT_IDS } from "../agent/AgentDefinition.js";
 import { loadSkills } from "../agent/SkillLoader.js";
+import { getDefaultTools } from "../tools/index.js";
+import { formatToolDetail } from "./commands/tools.js";
 import { runAgent } from "./output.js";
 
 /** The home menu is shown only when invoked with no args in an interactive terminal. */
@@ -67,6 +69,22 @@ async function showAgents(): Promise<void> {
   console.log();
 }
 
+async function browseTools(): Promise<void> {
+  const tools = getDefaultTools();
+  while (true) {
+    const choice = await select({
+      message: "Tools",
+      options: [
+        ...tools.map((t) => ({ value: t.definition.name, label: t.definition.name, hint: t.definition.description })),
+        { value: "__back", label: "← Back" },
+      ],
+    });
+    if (isCancel(choice) || choice === "__back") return;
+    const tool = tools.find((t) => t.definition.name === choice);
+    if (tool) console.log(formatToolDetail(tool));
+  }
+}
+
 async function showSkills(): Promise<void> {
   const skills = await loadSkills();
   if (skills.length === 0) { console.log(chalk.dim("\nNo skills installed.\n")); return; }
@@ -115,6 +133,7 @@ export async function showHomeMenu(): Promise<void> {
         { value: "run", label: "Run a task" },
         { value: "chat", label: "Chat" },
         { value: "agents", label: "Agents" },
+        { value: "tools", label: "Tools" },
         { value: "skills", label: "Skills" },
         { value: "settings", label: "Provider settings" },
         { value: "quit", label: "Quit" },
@@ -130,6 +149,7 @@ export async function showHomeMenu(): Promise<void> {
       case "run": await runTaskFlow(); break;
       case "chat": await chatFlow(); break;
       case "agents": await showAgents(); break;
+      case "tools": await browseTools(); break;
       case "skills": await showSkills(); break;
       case "settings": await settingsFlow(); break;
     }

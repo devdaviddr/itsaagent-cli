@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- (M-01) `iaa tools [name]` command — lists built-in tools with required params; `iaa tools <name>` shows full parameter detail and which built-in agents permit it. Home menu gains a "Tools" browser.
+
 ### Fixed
 - Conversational input (greetings, small talk, questions answerable from knowledge) is now answered directly instead of triggering tool use — fixes `iaa chat` running `bash` for "hello". Added a prompt rule against interactive commands (`read`, editors) that have no stdin.
 - Text tool-call parser now accepts the OpenAI-style `arguments` key in addition to `args`.
