@@ -1,6 +1,6 @@
 {
   "name": "itsaagent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ItsAAgent — Ollama-optimised ReAct agent for the CLI. Think, plan, execute on local hardware.",
   "type": "module",
   "packageManager": "pnpm@11.5.1",

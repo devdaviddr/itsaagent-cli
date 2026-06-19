@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.3.0] — 2026-06-20
 
 ### Added
 - (M-01) `iaa tools [name]` command — lists built-in tools with required params; `iaa tools <name>` shows full parameter detail and which built-in agents permit it. Home menu gains a "Tools" browser.
