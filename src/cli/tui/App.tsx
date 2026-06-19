@@ -55,6 +55,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const [selectedToolId, setSelectedToolId] = useState<number | null>(null);
   const [dims, setDims] = useState(termDims());
   const firstRef = useRef(true);
+  /** True once the in-flight run has been asked to cancel — a second Ctrl+C then quits. */
+  const cancelArmedRef = useRef(false);
 
   const theme = resolveTheme(themeName);
 
@@ -74,6 +76,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   function runTurn(text: string): void {
     const cont = !firstRef.current;
     firstRef.current = false;
+    cancelArmedRef.current = false;
     dispatch({ type: "user", text });
     dispatch({ type: "scrollToTail" });
     setMode("running");
@@ -200,6 +203,12 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
 
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
+      // Idle: quit. Running: first press cancels, a second quits.
+      if (mode === "running" && !cancelArmedRef.current) {
+        cancelArmedRef.current = true;
+        runtime.cancel();
+        return;
+      }
       exit();
       return;
     }
@@ -224,7 +233,13 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       return;
     }
     if (key.escape) {
-      dispatch({ type: "scrollToTail" });
+      // While a turn runs, Esc cancels it; otherwise it snaps back to the latest.
+      if (mode === "running") {
+        cancelArmedRef.current = true;
+        runtime.cancel();
+      } else {
+        dispatch({ type: "scrollToTail" });
+      }
       return;
     }
     // When the input line is empty, the arrow/enter keys drive tool-block focus
