@@ -8,6 +8,7 @@ import { registerConfigCommand } from "./cli/commands/config.js";
 import { registerModelsCommand } from "./cli/commands/models.js";
 import { registerRunCommand } from "./cli/commands/run.js";
 import { registerSkillsCommand } from "./cli/commands/skills.js";
+import { shouldShowMenu, showHomeMenu } from "./cli/menu.js";
 
 const program = new Command();
 
@@ -34,4 +35,11 @@ registerModelsCommand(program);
 registerCheckCommand(program);
 registerConfigCommand(program);
 
-program.parse(process.argv);
+if (shouldShowMenu(process.argv, Boolean(process.stdout.isTTY))) {
+  showHomeMenu().catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+} else {
+  program.parse(process.argv);
+}
