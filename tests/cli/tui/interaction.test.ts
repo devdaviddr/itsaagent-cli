@@ -51,8 +51,9 @@ describe("slash command parsing — new commands", () => {
 
 describe("autocomplete matching", () => {
   it("filters commands by the typed prefix", () => {
-    const m = matchCommands("/ag");
-    expect(m.map((c) => c.name)).toEqual(["agent", "agents"]);
+    // The plural list-variants are not in the palette, so /ag → just /agent.
+    expect(matchCommands("/ag").map((c) => c.name)).toEqual(["agent"]);
+    expect(matchCommands("/m").map((c) => c.name)).toEqual(["model"]);
   });
 
   it("returns all commands for a bare slash", () => {

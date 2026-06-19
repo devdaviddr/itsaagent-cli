@@ -57,14 +57,17 @@ export interface CommandMeta {
   help: string;
 }
 
-/** All slash commands, in display order. Drives autocomplete and /help. */
+/**
+ * Slash commands shown in the autocomplete palette, in display order. The
+ * arg-taking ones open a picker modal. The plural list variants (/agents,
+ * /models) are intentionally omitted here — their modal already lists
+ * everything — but remain typeable via {@link parseChatInput}.
+ */
 export const COMMANDS: CommandMeta[] = [
   { name: "help", help: "show commands" },
-  { name: "agent", arg: "<name>", help: "switch agent (resets context)" },
-  { name: "agents", help: "list agents" },
-  { name: "model", arg: "<name>", help: "switch model (persists)" },
-  { name: "models", help: "list available models" },
-  { name: "theme", arg: "<name>", help: "switch theme (persists)" },
+  { name: "agent", help: "switch agent — opens a picker" },
+  { name: "model", help: "switch model — opens a picker" },
+  { name: "theme", help: "switch theme — opens a picker" },
   { name: "tools", help: "list tools" },
   { name: "about", help: "version, licence, author" },
   { name: "clear", help: "reset the conversation" },
@@ -86,14 +89,14 @@ export function matchCommands(input: string): CommandMeta[] {
 
 export const CHAT_HELP = [
   "Slash commands:",
-  "  /agent <name>   switch agent (resets context)",
-  "  /agents         list available agents",
-  "  /model <name>   switch model (persists)",
-  "  /models         list available models",
-  "  /theme <name>   switch theme (persists)",
+  "  /agent          switch agent — opens a picker (resets context)",
+  "  /model          switch model — opens a picker (persists)",
+  "  /theme          switch theme — opens a picker (persists)",
   "  /tools          list tools",
   "  /about          version, licence, and author",
   "  /clear          reset the conversation",
   "  /help           show this help",
   "  /exit           leave chat",
+  "",
+  "Also typeable: /agent <name>, /model <name>, /theme <name>, /agents, /models",
 ].join("\n");
