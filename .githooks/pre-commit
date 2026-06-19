@@ -1,0 +1,15 @@
+#!/bin/sh
+# Refuse commits made directly on the default branch.
+# Every change must go on a feature/fix/docs/chore branch and be merged.
+# Bypass intentionally with:  git commit --no-verify
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  echo "✗ Direct commits to '$branch' are blocked." >&2
+  echo "  Create a branch first:  git checkout -b feat/your-change" >&2
+  echo "  (bypass with: git commit --no-verify)" >&2
+  exit 1
+fi
+
+exit 0

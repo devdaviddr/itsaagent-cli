@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Added a tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main`; enabled automatically via the `prepare` script.
+
+---
+
 ## [0.3.0] — 2026-06-20
 
 ### Added
