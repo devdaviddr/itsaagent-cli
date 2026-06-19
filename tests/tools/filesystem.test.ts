@@ -23,6 +23,52 @@ describe("readFileTool", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
+  it("reads a line range with a range header", async () => {
+    const path = join(TEST_DIR, "lines.txt");
+    await writeFile(path, "one\ntwo\nthree\nfour\nfive", "utf-8");
+    const result = await readFileTool.execute({ path, start_line: 2, end_line: 4 });
+    expect(result.success).toBe(true);
+    expect(result.data).toContain("[Lines 2–4 of 5");
+    expect(result.data).toContain("two\nthree\nfour");
+    expect(result.data).not.toContain("one");
+    expect(result.data).not.toContain("five");
+  });
+
+  it("clamps end_line beyond EOF to the last line", async () => {
+    const path = join(TEST_DIR, "short.txt");
+    await writeFile(path, "a\nb\nc", "utf-8");
+    const result = await readFileTool.execute({ path, start_line: 2, end_line: 99 });
+    expect(result.success).toBe(true);
+    expect(result.data).toContain("[Lines 2–3 of 3");
+  });
+
+  it("rejects start_line beyond EOF", async () => {
+    const path = join(TEST_DIR, "tiny.txt");
+    await writeFile(path, "a\nb", "utf-8");
+    const result = await readFileTool.execute({ path, start_line: 10, end_line: 12 });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/out of range/);
+  });
+
+  it("rejects an oversized file read without a range", async () => {
+    const path = join(TEST_DIR, "big.txt");
+    await writeFile(path, "x".repeat(151 * 1024), "utf-8");
+    const result = await readFileTool.execute({ path });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/too large to read whole/);
+  });
+
+  it("allows reading a range from an oversized file", async () => {
+    const path = join(TEST_DIR, "big2.txt");
+    const big = Array.from({ length: 6000 }, (_, i) => `line ${i + 1}`).join("\n");
+    await writeFile(path, big, "utf-8");
+    const result = await readFileTool.execute({ path, start_line: 1, end_line: 3 });
+    expect(result.success).toBe(true);
+    expect(result.data).toContain("line 1");
+    expect(result.data).toContain("line 3");
+    expect(result.data).not.toContain("line 4");
+  });
 });
 
 describe("writeFileTool", () => {
