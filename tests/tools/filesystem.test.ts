@@ -1,8 +1,18 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { globTool, grepTool, readFileTool, writeFileTool } from "../../src/tools/filesystem.js";
+import {
+  globTool,
+  grepTool,
+  readFileTool,
+  writeFileTool,
+  appendFileTool,
+  editFileTool,
+  deleteFileTool,
+  downloadFileTool,
+} from "../../src/tools/filesystem.js";
 
 const TEST_DIR = join(tmpdir(), `itsaagent-test-${process.pid}`);
 
@@ -89,6 +99,174 @@ describe("writeFileTool", () => {
     const result = await writeFileTool.execute({ path: "/root/forbidden.txt", content: "x" });
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
+  });
+});
+
+describe("appendFileTool", () => {
+  it("appends to an existing file without modifying prior content", async () => {
+    const path = join(TEST_DIR, "log.txt");
+    await writeFile(path, "line1\n", "utf-8");
+    const result = await appendFileTool.execute({ path, content: "line2\n" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("line1\nline2\n");
+  });
+
+  it("creates the file if it does not exist", async () => {
+    const path = join(TEST_DIR, "new.txt");
+    const result = await appendFileTool.execute({ path, content: "hello" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("hello");
+  });
+
+  it("creates parent directories", async () => {
+    const path = join(TEST_DIR, "a", "b", "c.txt");
+    const result = await appendFileTool.execute({ path, content: "x" });
+    expect(result.success).toBe(true);
+  });
+
+  it("reports appended byte count and new total", async () => {
+    const path = join(TEST_DIR, "count.txt");
+    await writeFile(path, "ab", "utf-8");
+    const result = await appendFileTool.execute({ path, content: "cde" });
+    expect(result.data).toContain("3 bytes");
+    expect(result.data).toContain("5 bytes total");
+  });
+});
+
+describe("editFileTool", () => {
+  it("replaces a line range and returns a diff", async () => {
+    const path = join(TEST_DIR, "edit.txt");
+    await writeFile(path, "a\nb\nc\nd", "utf-8");
+    const result = await editFileTool.execute({ path, start_line: 2, end_line: 3, new_content: "X\nY" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("a\nX\nY\nd");
+    expect(result.data).toContain("-b");
+    expect(result.data).toContain("+X");
+  });
+
+  it("inserts without removing when end = start - 1", async () => {
+    const path = join(TEST_DIR, "ins.txt");
+    await writeFile(path, "a\nb\nc", "utf-8");
+    const result = await editFileTool.execute({ path, start_line: 2, end_line: 1, new_content: "NEW" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("a\nNEW\nb\nc");
+  });
+
+  it("deletes lines when new_content is empty", async () => {
+    const path = join(TEST_DIR, "del.txt");
+    await writeFile(path, "a\nb\nc", "utf-8");
+    const result = await editFileTool.execute({ path, start_line: 2, end_line: 2, new_content: "" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("a\nc");
+  });
+
+  it("fails on missing file", async () => {
+    const result = await editFileTool.execute({ path: join(TEST_DIR, "nope.txt"), start_line: 1, end_line: 1, new_content: "x" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/No such file/);
+  });
+
+  it("fails on out-of-range lines", async () => {
+    const path = join(TEST_DIR, "range.txt");
+    await writeFile(path, "a\nb", "utf-8");
+    const result = await editFileTool.execute({ path, start_line: 5, end_line: 6, new_content: "x" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/out of range/);
+  });
+});
+
+describe("deleteFileTool", () => {
+  it("deletes a file and reports size", async () => {
+    const path = join(TEST_DIR, "gone.txt");
+    await writeFile(path, "12345", "utf-8");
+    const result = await deleteFileTool.execute({ path });
+    expect(result.success).toBe(true);
+    expect(result.data).toContain("5 bytes");
+    await expect(stat(path)).rejects.toBeTruthy();
+  });
+
+  it("refuses wildcard paths", async () => {
+    const result = await deleteFileTool.execute({ path: join(TEST_DIR, "*.txt") });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Wildcards/);
+  });
+
+  it("refuses paths inside .git", async () => {
+    const result = await deleteFileTool.execute({ path: join(TEST_DIR, ".git", "config") });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/\.git/);
+  });
+
+  it("refuses a non-empty directory", async () => {
+    const dir = join(TEST_DIR, "full");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "f.txt"), "x", "utf-8");
+    const result = await deleteFileTool.execute({ path: dir });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not empty/);
+  });
+
+  it("returns error for a missing file", async () => {
+    const result = await deleteFileTool.execute({ path: join(TEST_DIR, "absent.txt") });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("downloadFileTool", () => {
+  let server: Server;
+  let port: number;
+
+  beforeEach(async () => {
+    server = createServer((req, res) => {
+      if (req.url === "/file") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("downloaded-body");
+      } else if (req.url === "/r1") {
+        res.writeHead(302, { location: "/file" });
+        res.end();
+      } else if (req.url?.startsWith("/loop")) {
+        // Endless redirect chain to trip the limit.
+        const n = Number(req.url.slice("/loop".length) || "0");
+        res.writeHead(302, { location: `/loop${n + 1}` });
+        res.end();
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("downloads a URL to a destination path", async () => {
+    const dest = join(TEST_DIR, "dl.txt");
+    const result = await downloadFileTool.execute({ url: `http://127.0.0.1:${port}/file`, destination: dest });
+    expect(result.success).toBe(true);
+    expect(await readFile(dest, "utf-8")).toBe("downloaded-body");
+    expect(result.data).toContain("bytes");
+  });
+
+  it("follows a redirect", async () => {
+    const dest = join(TEST_DIR, "dl2.txt");
+    const result = await downloadFileTool.execute({ url: `http://127.0.0.1:${port}/r1`, destination: dest });
+    expect(result.success).toBe(true);
+    expect(await readFile(dest, "utf-8")).toBe("downloaded-body");
+  });
+
+  it("rejects non-HTTP schemes", async () => {
+    const result = await downloadFileTool.execute({ url: "file:///etc/passwd", destination: join(TEST_DIR, "x") });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/http/i);
+  });
+
+  it("fails when the redirect limit is exceeded", async () => {
+    const result = await downloadFileTool.execute({ url: `http://127.0.0.1:${port}/loop0`, destination: join(TEST_DIR, "y") });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/redirect/i);
   });
 });
 
