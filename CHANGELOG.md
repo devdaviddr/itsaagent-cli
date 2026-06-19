@@ -7,15 +7,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.4.0] — 2026-06-20
+
+Persistent, opencode-style TUI. See `spec/v0.4.0.md`. Backward-compatible (minor): no existing flag, output, or config key changes meaning.
+
 ### Added
-- (v0.4.0 spec) Persistent opencode-style TUI — see `spec/v0.4.0.md`. Foundation landed: a central TUI theme palette (`src/cli/tui/theme.ts`, ≥2 built-in themes, optional `theme` config field) with shared context-usage thresholds, and a pure conversation-state reducer (`src/cli/tui/state/conversation.ts`) that maps the agent event stream to an ordered, scrollable entry log with a bounded streaming buffer.
-- (v0.4.0 F-01/F-06) Persistent TUI shell — a single full-screen Ink app (header · scrollable message log · fixed input box · status line) that replaces the no-arg home menu and backs `iaa chat`. `iaa run "task" -i` opens it seeded with the task; `iaa run "task"` without `-i` keeps the legacy one-shot render. Keyboard scrollback (PgUp/PgDn/Esc), terminal-width-aware windowing, a live context bar, and a provider-unreachable warning. Non-TTY/piped runs use the unchanged plain renderer. Rewrote the agent-event hook to remove listeners individually (fixes the global `removeAllListeners` leak, D-1).
-- (v0.4.0 F-03/F-05) TUI interaction — collapsible, themed tool blocks (collapsed summary with a "N more lines — Enter to expand" marker, no more silent 120-char cut; Ctrl+R expands/collapses all, ↑/↓ + Enter focus/toggle a block when the input is empty), and inline slash commands with a `/`-triggered autocomplete popup (Tab to complete). New commands `/theme`, `/models`, `/tools` alongside `/agent`, `/model`, `/clear`, `/help`, `/exit`; results post as in-log entries and `/theme` updates the palette live.
-- (v0.4.0 F-07) In-TUI cancellation — `AgentRuntime.cancel()` stops an in-flight run cooperatively (at the next step/stream checkpoint) and resolves it as cancelled via a new `cancelled` event, with no unhandled rejection. In the TUI, `Esc` cancels a running turn and keeps the session open; `Ctrl+C` quits at idle and cancels-then-quits during a run.
+- **Persistent TUI** (F-01/F-06) — a single full-screen Ink app (header · scrollable message log · fixed input box · status line) replaces the no-arg home menu and backs `iaa chat`. Keyboard scrollback (PgUp/PgDn; Esc returns to latest when idle), terminal-width-aware windowing, a live context bar, and a provider-unreachable warning. Built on a pure conversation-state reducer (`src/cli/tui/state/conversation.ts`) with a bounded streaming buffer.
+- **`iaa run -i`** — opens the persistent TUI seeded with the task. `iaa run "task"` without `-i` keeps the legacy one-shot render; non-TTY/piped runs use the unchanged plain renderer.
+- **Collapsible tool blocks** (F-03) — collapsed summary with a "N more lines — Enter to expand" marker (no more silent 120-char cut); Ctrl+R expands/collapses all; ↑/↓ + Enter focus/toggle a block when the input is empty.
+- **Inline slash commands + autocomplete** (F-05) — a `/`-triggered popup (Tab to complete). New `/theme`, `/models`, `/tools` alongside `/agent`, `/agents`, `/model`, `/clear`, `/help`, `/exit`; results post as in-log entries.
+- **Theming** (F-04) — central semantic palette with built-in `default` and `mono` themes, selectable via the optional `theme` config key and `/theme` (persists, re-themes live).
+- **In-TUI cancellation** (F-07) — `AgentRuntime.cancel()` stops an in-flight run cooperatively, emitting a new `cancelled` event. `Esc` cancels a running turn and keeps the session open; `Ctrl+C` quits at idle and cancels-then-quits during a run.
+- A tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main` (enabled via the `prepare` script), and a project Claude skill (`.claude/skills/new-feature-skill/`) enforcing the Spec-Driven Development workflow.
 
 ### Changed
-- Added a tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main`; enabled automatically via the `prepare` script.
-- Added a project Claude skill (`.claude/skills/new-feature-skill/`) that enforces the Spec-Driven Development workflow: spec + versioning → branch → build → test → docs → merge → tag.
+- The no-arg `iaa` and `iaa chat` now launch the persistent TUI instead of the Clack menu / plain REPL. The non-interactive subcommands (`run` without `-i`, `config`, `check`, `tools`, …) are unchanged.
+
+### Fixed
+- The TUI event hook no longer calls `removeAllListeners()` (which wiped every subscriber); listeners are detached individually (D-1).
+- Streaming no longer keeps an unbounded per-run buffer; only the active step buffers deltas (D-4).
+- Context-usage thresholds (60/80) are defined once and shared (D-6).
+- A stuck run can be cancelled from the TUI instead of killing the whole process (D-7).
+- New dependency: `ink-text-input`.
 
 ---
 

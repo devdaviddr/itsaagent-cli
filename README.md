@@ -23,8 +23,9 @@ Built for developers who want an autonomous agent without a cloud subscription.
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
 - **13 built-in tools** — `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
-- **Interactive home menu** — run `iaa` with no arguments for a guided menu (run a task, chat, browse agents/skills, settings)
-- **Live TUI** — Ink-powered terminal UI with streaming output, step-by-step progress, and a context-usage bar
+- **Persistent TUI** — run `iaa` (or `iaa chat`) for a full-screen, opencode-style terminal app: a scrollable message log, a fixed input box, a live context bar, collapsible/themed tool blocks, inline slash commands with `/`-autocomplete, and `Esc`-to-cancel
+- **Theming** — coherent, config-selectable colour themes (`default`, `mono`), switchable live with `/theme`
+- **Scriptable one-shot** — `iaa run "task"` stays a one-shot command (pipe-friendly); add `-i` to open the same task in the persistent TUI
 - **Provider abstraction** — Ollama (default) or any OpenAI-compatible endpoint
 - **Context management** — 24 576-token window, oldest-first eviction with an in-context trim notice
 - **Session logging** — structured markdown log per run (`-v` or `-l`)
@@ -59,7 +60,7 @@ iaa check
 # Run a task
 iaa run "list typescript files in this project and count lines of code" -v
 
-# …or just launch the interactive menu
+# …or just launch the persistent TUI
 iaa
 ```
 
@@ -68,9 +69,9 @@ iaa
 ## CLI reference
 
 ```
-iaa                  Interactive home menu (pick agent/model, browse tools, run, chat)
-iaa run <task...>    Execute a one-shot task (prefix /skill-name to run a skill)
-iaa chat             Interactive multi-turn session (keeps context; slash commands below)
+iaa                  Launch the persistent TUI (scrollable log, input box, slash commands)
+iaa run <task...>    Execute a one-shot task (prefix /skill-name to run a skill; -i opens the TUI)
+iaa chat             Persistent multi-turn TUI session (keeps context; slash commands below)
 iaa agents           List available agents and their tool access
 iaa tools [name]     List built-in tools, or show full detail for one
 iaa skills           List installed skills
@@ -79,17 +80,31 @@ iaa check            Verify Ollama, model availability, and native tool-use supp
 iaa config           View or update persistent config
 ```
 
-### Chat slash commands
+### Slash commands
 
-Inside `iaa chat` (or the menu's Chat):
+Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; `Tab` completes):
 
 ```
 /agent <name>   switch agent (resets context)
 /agents         list available agents
 /model <name>   switch model (persists to config)
+/models         list available models
+/theme <name>   switch theme: default, mono (persists to config)
+/tools          list built-in tools
 /clear          reset the conversation
 /help           show available commands
-/exit           leave chat
+/exit           leave the TUI
+```
+
+### TUI keys
+
+```
+↵            send the message in the input box
+PgUp / PgDn  scroll the transcript;  Esc returns to the latest (when idle)
+↑ / ↓ + ↵    focus and expand/collapse a tool block (when the input is empty)
+Ctrl+R       expand / collapse all tool blocks
+Esc          cancel the in-flight run (keeps the session open)
+Ctrl+C       quit (during a run: cancel, then quit on a second press)
 ```
 
 ### Flags
@@ -97,6 +112,7 @@ Inside `iaa chat` (or the menu's Chat):
 | Flag | Description |
 |---|---|
 | `-v, --verbose` | Stream thoughts, tool calls, and results live. Also writes a session log. |
+| `-i, --interactive` | (`run` only) Open the persistent TUI seeded with the task instead of a one-shot run |
 | `-l, --log` | Write session log only (no console output beyond the final answer) |
 | `-m, --model <name>` | Override model for this run |
 | `-a, --agent <id>` | Select an agent: `build` (default), `plan`, `cli`, or a custom one |
@@ -130,9 +146,9 @@ Config stored at `~/.config/ai-cli/config.json`.
 │       └──────────────┴──────────────┘                           │
 │                       │                                         │
 │              ┌─────────▼──────────┐                             │
-│              │    output.ts       │  TTY?                        │
-│              │  ┌──────────────┐  │──────► Ink TUI (AgentView)  │
-│              │  │ renderPlain  │  │──────► plain stderr          │
+│              │  output.ts route   │  interactive ► tui/App.tsx  │
+│              │  ┌──────────────┐  │  one-shot TTY ► AgentView   │
+│              │  │ renderPlain  │  │  piped/non-TTY► plain stderr│
 │              └─────────┬────────┘                               │
 └────────────────────────┼────────────────────────────────────────┘
                          │
