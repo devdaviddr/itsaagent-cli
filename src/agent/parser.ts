@@ -6,6 +6,13 @@ export interface ParsedResponse {
   isExplicitAnswer: boolean;
 }
 
+/** Accept either `args` (our format) or `arguments` (OpenAI/Ollama style) as the tool args object. */
+function extractArgs(o: { args?: unknown; arguments?: unknown }): Record<string, unknown> | undefined {
+  const a = o.args ?? o.arguments;
+  if (a && typeof a === "object" && !Array.isArray(a)) return a as Record<string, unknown>;
+  return undefined;
+}
+
 export function parseResponse(raw: string): ParsedResponse {
   const result: ParsedResponse = { isExplicitAnswer: false };
 
@@ -24,14 +31,9 @@ export function parseResponse(raw: string): ParsedResponse {
   const toolCallMatch = raw.match(/<tool_call>([\s\S]*?)<\/tool_call>/i);
   if (toolCallMatch) {
     try {
-      const parsed = JSON.parse(toolCallMatch[1].trim()) as { name?: unknown; args?: unknown };
+      const parsed = JSON.parse(toolCallMatch[1].trim()) as { name?: unknown; args?: unknown; arguments?: unknown };
       if (typeof parsed.name === "string") {
-        result.toolCall = {
-          name: parsed.name,
-          args: (parsed.args && typeof parsed.args === "object" && !Array.isArray(parsed.args))
-            ? (parsed.args as Record<string, unknown>)
-            : {},
-        };
+        result.toolCall = { name: parsed.name, args: extractArgs(parsed) ?? {} };
         return result;
       }
     } catch { /* fall through */ }
@@ -72,9 +74,10 @@ export function parseResponse(raw: string): ParsedResponse {
         }
         if (end !== -1) {
           try {
-            const parsed = JSON.parse(substr.slice(0, end + 1)) as { name?: unknown; args?: unknown };
-            if (typeof parsed.name === "string" && parsed.args && typeof parsed.args === "object") {
-              result.toolCall = { name: parsed.name, args: parsed.args as Record<string, unknown> };
+            const parsed = JSON.parse(substr.slice(0, end + 1)) as { name?: unknown; args?: unknown; arguments?: unknown };
+            const args = extractArgs(parsed);
+            if (typeof parsed.name === "string" && args) {
+              result.toolCall = { name: parsed.name, args };
               return result;
             }
           } catch { /* ignore */ }

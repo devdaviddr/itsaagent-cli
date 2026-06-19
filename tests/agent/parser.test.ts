@@ -72,6 +72,18 @@ describe("parseResponse", () => {
     const result = parseResponse(raw);
     expect(result.toolCall).toEqual({ name: "bash", args: {} });
   });
+
+  it("accepts the OpenAI-style 'arguments' key in <tool_call>", () => {
+    const raw = `<tool_call>{"name":"read_file","arguments":{"path":"a.ts"}}</tool_call>`;
+    const result = parseResponse(raw);
+    expect(result.toolCall).toEqual({ name: "read_file", args: { path: "a.ts" } });
+  });
+
+  it("accepts 'arguments' in a bare JSON tool call after a thought", () => {
+    const raw = `thought: reading the file\naction:\n{"name":"read_file","arguments":{"path":"b.ts"}}`;
+    const result = parseResponse(raw);
+    expect(result.toolCall).toEqual({ name: "read_file", args: { path: "b.ts" } });
+  });
 });
 
 describe("stableKey", () => {
