@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - (v0.4.0 spec) Persistent opencode-style TUI — see `spec/v0.4.0.md`. Foundation landed: a central TUI theme palette (`src/cli/tui/theme.ts`, ≥2 built-in themes, optional `theme` config field) with shared context-usage thresholds, and a pure conversation-state reducer (`src/cli/tui/state/conversation.ts`) that maps the agent event stream to an ordered, scrollable entry log with a bounded streaming buffer.
+- (v0.4.0 F-01/F-06) Persistent TUI shell — a single full-screen Ink app (header · scrollable message log · fixed input box · status line) that replaces the no-arg home menu and backs `iaa chat`. `iaa run "task" -i` opens it seeded with the task; `iaa run "task"` without `-i` keeps the legacy one-shot render. Keyboard scrollback (PgUp/PgDn/Esc), terminal-width-aware windowing, a live context bar, and a provider-unreachable warning. Non-TTY/piped runs use the unchanged plain renderer. Rewrote the agent-event hook to remove listeners individually (fixes the global `removeAllListeners` leak, D-1).
 
 ### Changed
 - Added a tracked `pre-commit` hook (`.githooks/`) that blocks direct commits to `main`; enabled automatically via the `prepare` script.

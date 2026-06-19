@@ -2,7 +2,8 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { AgentRuntime } from "../../agent/AgentRuntime.js";
 import { loadConfig, toAgentConfig, CONFIG_PATH } from "../config.js";
-import { runAgent } from "../output.js";
+import { runAgent, selectRenderMode, isInteractiveTTY } from "../output.js";
+import { launchTui } from "../tui/launch.js";
 import { resolveCliSkills } from "../skillResolve.js";
 import { loadSkills } from "../../agent/SkillLoader.js";
 
@@ -10,7 +11,8 @@ export function registerRunCommand(program: Command): void {
   program
     .command("run <task...>")
     .description("Execute a task. Prefix with /skill-name to run a skill (e.g. run /refactor src/x.ts).")
-    .action(async (taskParts: string[]) => {
+    .option("-i, --interactive", "Open the persistent TUI seeded with the task (stays open for follow-ups)")
+    .action(async (taskParts: string[], cmdOpts: { interactive?: boolean }) => {
       const conf = await loadConfig();
       const opts = program.optsWithGlobals<{
         verbose?: boolean; log?: boolean; model?: string; host?: string;
@@ -66,6 +68,15 @@ export function registerRunCommand(program: Command): void {
           `Model "${agentConfig.provider.model}" not found. Available: ${models.map((m) => m.name).join(", ") || "none"}`,
         ));
         process.exit(1);
+      }
+
+      const renderMode = selectRenderMode({
+        isTTY: isInteractiveTTY(),
+        interactive: Boolean(cmdOpts.interactive),
+      });
+      if (renderMode === "interactive") {
+        await launchTui({ runtime, seedTask: task, providerOk: true, themeName: conf.theme });
+        return;
       }
 
       const answer = await runAgent(runtime, task);

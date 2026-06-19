@@ -1,112 +1,61 @@
-import { useEffect, useState } from "react";
+/**
+ * Subscribe a conversation dispatcher to an AgentRuntime's event stream.
+ *
+ * Listeners are attached once and removed individually on cleanup — never via
+ * removeAllListeners(), which would clobber every other subscriber (the old D-1
+ * bug). All event→state mapping lives here, so there is exactly one wiring.
+ */
+import { useEffect } from "react";
 import type { AgentRuntime } from "../../../agent/AgentRuntime.js";
-import type { StepRecord, StepStatus } from "../../../types.js";
+import type { ToolResult } from "../../../types.js";
+import type { ConvAction } from "../state/conversation.js";
 
-export interface AgentState {
-  status: "idle" | "running" | "done" | "error";
-  currentStep: number;
-  totalSteps: number;
-  steps: StepRecord[];
-  currentChunk: string;
-  answer: string;
-  errorMessage: string;
-  logPath: string;
-  model: string;
-  cwd: string;
+export interface AgentEventHandlers {
+  onUsage: (usage: { used: number; max: number; ratio: number }) => void;
+  /** Fired on answer or error — the turn has ended. */
+  onIdle: () => void;
 }
 
-function initialState(): AgentState {
-  return {
-    status: "idle",
-    currentStep: 0,
-    totalSteps: 0,
-    steps: [],
-    currentChunk: "",
-    answer: "",
-    errorMessage: "",
-    logPath: "",
-    model: "",
-    cwd: "",
-  };
-}
-
-function updateStep(
-  steps: StepRecord[],
-  index: number,
-  update: Partial<StepRecord>,
-): StepRecord[] {
-  const existing = steps.find((s) => s.index === index);
-  if (existing) {
-    return steps.map((s) => (s.index === index ? { ...s, ...update } : s));
-  }
-  return [...steps, { index, status: "thinking" as StepStatus, ...update }];
-}
-
-export function useAgentEvents(runtime: AgentRuntime): AgentState {
-  const [state, setState] = useState<AgentState>(initialState);
-
+export function useAgentEvents(
+  runtime: AgentRuntime,
+  dispatch: (action: ConvAction) => void,
+  handlers: AgentEventHandlers,
+): void {
   useEffect(() => {
-    runtime.on("start", ({ model, cwd, logPath }) => {
-      setState((s) => ({ ...s, status: "running", model, cwd, logPath }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subs: Array<[string, (arg: any) => void]> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const on = (event: string, fn: (arg: any) => void): void => {
+      runtime.on(event as never, fn as never);
+      subs.push([event, fn]);
+    };
+
+    on("step", ({ index }: { index: number }) => dispatch({ type: "step", index }));
+    on("chunk", ({ delta }: { delta: string }) => dispatch({ type: "chunk", delta }));
+    on("thought", ({ text, stepIndex }: { text: string; stepIndex: number }) =>
+      dispatch({ type: "thought", text, stepIndex }),
+    );
+    on(
+      "tool:call",
+      ({ name, args, stepIndex }: { name: string; args: Record<string, unknown>; stepIndex: number }) =>
+        dispatch({ type: "tool:call", name, args, stepIndex }),
+    );
+    on("tool:result", ({ result, stepIndex }: { result: ToolResult; stepIndex: number }) =>
+      dispatch({ type: "tool:result", result, stepIndex }),
+    );
+    on("context:usage", (u: { used: number; max: number; ratio: number }) => handlers.onUsage(u));
+    on("answer", ({ text }: { text: string }) => {
+      dispatch({ type: "answer", text });
+      handlers.onIdle();
+    });
+    on("error", ({ error }: { error: { message: string } }) => {
+      dispatch({ type: "error", text: error.message });
+      handlers.onIdle();
     });
 
-    runtime.on("step", ({ index, total }) => {
-      setState((s) => ({
-        ...s,
-        currentStep: index,
-        totalSteps: total,
-        currentChunk: "",
-        steps: updateStep(s.steps, index, { index, status: "thinking" }),
-      }));
-    });
-
-    runtime.on("chunk", ({ delta }) => {
-      setState((s) => ({ ...s, currentChunk: s.currentChunk + delta }));
-    });
-
-    runtime.on("thought", ({ text, stepIndex }) => {
-      setState((s) => ({
-        ...s,
-        currentChunk: "",
-        steps: updateStep(s.steps, stepIndex, { thought: text }),
-      }));
-    });
-
-    runtime.on("tool:call", ({ name, args, stepIndex }) => {
-      setState((s) => ({
-        ...s,
-        steps: updateStep(s.steps, stepIndex, { status: "executing", toolName: name, toolArgs: args }),
-      }));
-    });
-
-    runtime.on("tool:result", ({ result, stepIndex }) => {
-      setState((s) => ({
-        ...s,
-        steps: updateStep(s.steps, stepIndex, {
-          status: result.success ? "done" : "error",
-          toolResult: result,
-        }),
-      }));
-    });
-
-    runtime.on("answer", ({ text }) => {
-      setState((s) => ({ ...s, status: "done", answer: text, currentChunk: "" }));
-    });
-
-    runtime.on("error", ({ error, stepIndex }) => {
-      setState((s) => ({
-        ...s,
-        status: "error",
-        errorMessage: error.message,
-        currentChunk: "",
-        ...(stepIndex !== undefined
-          ? { steps: updateStep(s.steps, stepIndex, { status: "error" }) }
-          : {}),
-      }));
-    });
-
-    return () => { runtime.removeAllListeners(); };
-  }, [runtime]);
-
-  return state;
+    return () => {
+      for (const [event, fn] of subs) runtime.off(event as never, fn as never);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }
