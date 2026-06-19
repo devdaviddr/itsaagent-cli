@@ -11,11 +11,13 @@ import {
   downloadFileTool,
 } from "./filesystem.js";
 import { sshTool } from "./ssh.js";
+import { gitTool } from "./git.js";
 
 export function getDefaultTools(): Tool[] {
   return [
     bashTool,
     sshTool,
+    gitTool,
     readFileTool,
     writeFileTool,
     appendFileTool,
@@ -27,6 +29,7 @@ export function getDefaultTools(): Tool[] {
   ];
 }
 
+export { gitTool } from "./git.js";
 export { bashTool } from "./bash.js";
 export {
   readFileTool,
