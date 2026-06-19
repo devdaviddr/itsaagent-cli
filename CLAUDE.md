@@ -34,7 +34,7 @@ Organised by layer under `src/`, no framework:
 
 - **`src/index.ts`** — CLI entry point (commander). Loads config, registers commands, defines global flags. With no args in a TTY it launches the home menu (`src/cli/menu.ts`); otherwise it parses the command line.
 - **`src/agent/`** — the agent core:
-  - `AgentRuntime.ts` — the ReAct loop (`run`, `continueChat`, private `runLoop`). Sends tools natively when the model supports them, reads `message.tool_calls`, falls back to `parseResponse()` otherwise. Owns loop detection, failure escalation, and `SessionLogger` integration.
+  - `AgentRuntime.ts` — the ReAct loop (`run`, `continueChat`, private `runLoop`). Sends tools natively when the model supports them, reads `message.tool_calls`, falls back to `parseResponse()` otherwise. Owns loop detection, failure escalation, and `SessionLogger` integration. `cancel()` cooperatively stops an in-flight loop (checked at the step boundary and around the provider stream), emitting the `cancelled` event and resolving with a `[cancelled]` sentinel.
   - `AgentDefinition.ts` / `AgentRegistry.ts` / `AgentLoader.ts` — built-in agents (build/plan/cli), the registry, and the markdown loader for user agents.
   - `SkillLoader.ts` / `frontmatter.ts` — markdown skill loading, `{{arg}}` interpolation, shared frontmatter parsing.
   - `ContextManager.ts` — append-only message store, token estimation (3.5 chars/token), oldest-first trim with an in-context eviction notice, `onEvict`/`onUsage` callbacks.
@@ -42,7 +42,8 @@ Organised by layer under `src/`, no framework:
   - `parser.ts` — the text-format fallback parser. `SessionLogger.ts` — per-session markdown logs. `errors.ts` — typed agent errors.
 - **`src/providers/`** — `Provider` interface, `OllamaProvider` (NDJSON stream + native `tools` + `supportsTools()` via `/api/show`), `OpenAICompatProvider`, factory.
 - **`src/tools/`** — one file per tool family (`bash`, `ssh` incl. upload/download, `git`, `fetch`, `filesystem` incl. read/write/edit/append/delete/download). `index.ts` exposes `getDefaultTools()`.
-- **`src/cli/`** — `commands/` (run, chat, agents, skills, models, check, config), `output.ts` (TTY → Ink, else plain), `menu.ts` (home menu), `config.ts` (config + `toAgentConfig`), `tui/` (Ink components), `contextBar.ts`, `skillResolve.ts`.
+- **`src/cli/`** — `commands/` (run, chat, agents, skills, models, check, config), `output.ts` (render routing: interactive TUI / one-shot Ink / plain — see `selectRenderMode`), `config.ts` (config + `toAgentConfig`), `contextBar.ts` (+ shared `CTX_*` thresholds), `chatCommands.ts` (slash-command parser + `matchCommands` autocomplete), `skillResolve.ts`. `menu.ts` remains for `shouldShowMenu` but the no-arg `iaa` now launches the persistent TUI.
+  - **`src/cli/tui/`** — the persistent opencode-style TUI (v0.4.0). `launch.ts` (`launchTui`/`launchHomeTui`, alternate-screen) renders `App.tsx`, which owns one `AgentRuntime` across turns (continueChat semantics). `state/conversation.ts` is the pure event→entry reducer (bounded streaming buffer, follow/paused scroll). `layout/` (Header, MessageLog, InputBox, StatusLine + pure `viewport.ts` windowing and `chrome.ts` text), `components/` (EntryView, ToolBlock + pure `toolFormat.ts`, CommandPalette), `theme.ts` (semantic palette, built-in themes), `hooks/useAgentEvents.ts` (per-handler `off()`, never `removeAllListeners`). `AgentView.tsx`/`StepView.tsx`/`Spinner.tsx` back the legacy one-shot `run` view.
 
 ## ReAct agent pattern
 
