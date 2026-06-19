@@ -316,6 +316,13 @@ iaa run "my task" -m mistral:7b
 
 ---
 
+## Compatibility & known issues
+
+- **[TESTED_MODELS.md](./TESTED_MODELS.md)** — which Ollama models have been run with ItsAAgent and any quirks per model.
+- **[KNOWN_ISSUES.md](./KNOWN_ISSUES.md)** — current limitations and workarounds, including how small models emit tool calls in inconsistent formats and how the fallback parser handles them.
+
+---
+
 ## Development
 
 ```bash
