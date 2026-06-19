@@ -6,10 +6,12 @@ interface CommandPaletteProps {
   matches: CommandMeta[];
   theme: Theme;
   width: number;
+  /** Index of the highlighted row (navigable with ↑/↓). */
+  index: number;
 }
 
-/** Autocomplete popup; the top (completed-on-Tab) match shows a full-width highlight bar. */
-export function CommandPalette({ matches, theme, width }: CommandPaletteProps) {
+/** Autocomplete popup; the highlighted (↑/↓ selectable) match shows a full-width bar. */
+export function CommandPalette({ matches, theme, width, index }: CommandPaletteProps) {
   if (matches.length === 0) return null;
   const labelWidth = 16;
   return (
@@ -24,7 +26,7 @@ export function CommandPalette({ matches, theme, width }: CommandPaletteProps) {
     >
       {matches.map((c, i) => {
         const label = `/${c.name}${c.arg ? ` ${c.arg}` : ""}`;
-        if (i === 0) {
+        if (i === index) {
           // Selected row: a solid bar spanning the panel width.
           const line = `${label.padEnd(labelWidth)}${c.help}`;
           const padded = line.length >= width ? line.slice(0, width) : line.padEnd(width);
