@@ -39,6 +39,20 @@ export interface ProviderConfig {
   maxTokens: number;
 }
 
+export interface SkillArg {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  args: SkillArg[];
+  /** Markdown body; {{arg}} placeholders are interpolated before injection. */
+  body: string;
+}
+
 export interface AgentConfig {
   provider: ProviderConfig;
   verbose: boolean;
@@ -47,6 +61,8 @@ export interface AgentConfig {
   logDir?: string;
   /** Active agent definition. Defaults to the `build` agent when omitted. */
   agent?: import("./agent/AgentDefinition.js").AgentDefinition;
+  /** Active skills whose (interpolated) bodies extend the system prompt. */
+  skills?: Skill[];
 }
 
 export interface ToolCall {

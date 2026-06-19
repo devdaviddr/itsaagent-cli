@@ -1,5 +1,5 @@
 import os from "node:os";
-import type { Tool } from "../types.js";
+import type { Tool, Skill } from "../types.js";
 
 export function buildToolDescriptions(tools: Tool[]): string {
   return tools
@@ -19,7 +19,7 @@ export function buildToolDescriptions(tools: Tool[]): string {
     .join("\n\n");
 }
 
-export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string): string {
+export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string, skills?: Skill[]): string {
   const base = [
     `You are an AI agent that completes tasks by running tools step by step.`,
     `Follow the ReAct pattern: Thought → Action → Observation → Thought → …`,
@@ -58,5 +58,12 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `10. If the same approach fails twice, STOP and state explicitly: (a) why the previous attempts failed, and (b) what is fundamentally different about your next approach. Do not retry with minor variations`,
   ].join("\n");
 
-  return agentSuffix ? `${base}\n\n${agentSuffix}` : base;
+  let prompt = agentSuffix ? `${base}\n\n${agentSuffix}` : base;
+
+  if (skills && skills.length > 0) {
+    const blocks = skills.map((s) => `## Active Skill: ${s.name}\n${s.body}`).join("\n\n");
+    prompt = `${prompt}\n\n${blocks}`;
+  }
+
+  return prompt;
 }

@@ -7,8 +7,11 @@ import { registerChatCommand } from "./cli/commands/chat.js";
 import { registerConfigCommand } from "./cli/commands/config.js";
 import { registerModelsCommand } from "./cli/commands/models.js";
 import { registerRunCommand } from "./cli/commands/run.js";
+import { registerSkillsCommand } from "./cli/commands/skills.js";
 
 const program = new Command();
+
+const collect = (val: string, acc: string[]): string[] => { acc.push(val); return acc; };
 
 program
   .name("iaa")
@@ -19,11 +22,14 @@ program
   .option("-m, --model <model>", "Override the model for this run")
   .option("--host <url>", "Override provider host URL")
   .option("-s, --max-steps <n>", "Override max ReAct iterations", parseInt)
-  .option("-a, --agent <id>", "Select an agent (build, plan, cli)");
+  .option("-a, --agent <id>", "Select an agent (build, plan, cli)")
+  .option("--skill <name>", "Apply a skill (repeatable)", collect, [])
+  .option("--skill-arg <name=value>", "Provide a skill arg value (repeatable)", collect, []);
 
 registerRunCommand(program);
 registerChatCommand(program);
 registerAgentsCommand(program);
+registerSkillsCommand(program);
 registerModelsCommand(program);
 registerCheckCommand(program);
 registerConfigCommand(program);

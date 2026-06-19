@@ -130,7 +130,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   initSession(): void {
     const cwd = process.cwd();
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills) });
   }
 
   /**
@@ -151,7 +151,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const startTime = Date.now();
 
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills) });
     this.ctx.add({ role: "user", content: task });
 
     await this.detectToolUse();

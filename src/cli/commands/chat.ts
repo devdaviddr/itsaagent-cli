@@ -4,6 +4,7 @@ import type { Command } from "commander";
 import { AgentRuntime } from "../../agent/AgentRuntime.js";
 import { loadConfig, toAgentConfig } from "../config.js";
 import { runAgent } from "../output.js";
+import { resolveCliSkills } from "../skillResolve.js";
 
 export function registerChatCommand(program: Command): void {
   program
@@ -11,7 +12,10 @@ export function registerChatCommand(program: Command): void {
     .description("Interactive chat mode")
     .action(async () => {
       const conf = await loadConfig();
-      const opts = program.optsWithGlobals<{ verbose?: boolean; log?: boolean; model?: string; host?: string; maxSteps?: number; agent?: string }>();
+      const opts = program.optsWithGlobals<{
+        verbose?: boolean; log?: boolean; model?: string; host?: string;
+        maxSteps?: number; agent?: string; skill?: string[]; skillArg?: string[];
+      }>();
       let agentConfig;
       try {
         agentConfig = toAgentConfig(conf, opts);
@@ -19,6 +23,14 @@ export function registerChatCommand(program: Command): void {
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));
         process.exit(1);
       }
+
+      const { skills, error } = await resolveCliSkills(opts.skill ?? [], opts.skillArg ?? []);
+      if (error) {
+        console.error(chalk.red(error));
+        process.exit(1);
+      }
+      agentConfig.skills = skills;
+
       const runtime = new AgentRuntime(agentConfig);
 
       const { ok } = await runtime.checkProvider();
