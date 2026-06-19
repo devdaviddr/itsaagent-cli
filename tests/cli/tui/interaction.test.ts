@@ -51,7 +51,7 @@ describe("slash command parsing — new commands", () => {
 
 describe("autocomplete matching", () => {
   it("filters commands by the typed prefix", () => {
-    const m = matchCommands("/a");
+    const m = matchCommands("/ag");
     expect(m.map((c) => c.name)).toEqual(["agent", "agents"]);
   });
 

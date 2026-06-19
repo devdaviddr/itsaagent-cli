@@ -9,12 +9,15 @@ import {
   conversationReducer,
   initialConversation,
 } from "./state/conversation.js";
+import { basename } from "node:path";
+import { VERSION } from "../../version.js";
+import { aboutText } from "./about.js";
 import { resolveTheme, themeNames } from "./theme.js";
 import { useAgentEvents } from "./hooks/useAgentEvents.js";
-import { Header } from "./layout/Header.js";
 import { MessageLog } from "./layout/MessageLog.js";
 import { InputBox } from "./layout/InputBox.js";
 import { StatusLine } from "./layout/StatusLine.js";
+import { Banner } from "./components/Banner.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { entryHeight, windowEntries } from "./layout/viewport.js";
 import type { TuiMode } from "./layout/chrome.js";
@@ -178,14 +181,19 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         dispatch({ type: "notice", text: `Tools:\n${list}` });
         return;
       }
+      case "about":
+        dispatch({ type: "notice", text: aboutText() });
+        return;
       case "unknown":
         dispatch({ type: "error", text: `Unknown command "/${cmd.cmd}". Try /help.` });
         return;
     }
   }
 
-  const contentWidth = Math.max(20, dims.cols - 2);
-  const logRows = Math.max(3, dims.rows - 5);
+  const contentWidth = Math.max(20, dims.cols - 3);
+  const matchesOpen = mode !== "running" ? matchCommands(value).length : 0;
+  // Reserve rows for the input panel (3), hint + status bar (2), and any open palette.
+  const logRows = Math.max(3, dims.rows - 6 - matchesOpen);
   const heights = conv.entries.map((e) => entryHeight(e, contentWidth));
   const win = windowEntries(heights, logRows, conv.scrollOffset);
   const visible = conv.entries.slice(win.startIndex, win.endIndex);
@@ -265,26 +273,42 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const tuiMode: TuiMode =
     mode === "running" ? "running" : !conv.following ? "scrolled" : lastIsError ? "error" : "idle";
 
+  const isEmpty = conv.entries.length === 0 && mode !== "running";
+
   return (
-    <Box flexDirection="column" paddingX={1}>
-      <Header theme={theme} agent={agentId} model={model} usage={usage} providerOk={providerOk} />
-      <MessageLog
-        visible={visible}
-        theme={theme}
-        width={contentWidth}
-        live={mode === "running" && conv.following ? conv.live : ""}
-        focusedToolId={selected}
-      />
-      {mode !== "running" ? <CommandPalette matches={matches} theme={theme} /> : null}
+    <Box flexDirection="column" paddingX={1} height={dims.rows}>
+      <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"}>
+        {isEmpty ? (
+          <Banner theme={theme} />
+        ) : (
+          <MessageLog
+            visible={visible}
+            theme={theme}
+            width={contentWidth}
+            live={mode === "running" && conv.following ? conv.live : ""}
+            focusedToolId={selected}
+          />
+        )}
+      </Box>
+      {mode !== "running" ? <CommandPalette matches={matches} theme={theme} width={contentWidth} /> : null}
       <InputBox
         theme={theme}
-        prompt={`${agentId} ›`}
+        agent={agentId}
+        model={model}
         value={value}
         onChange={setValue}
         onSubmit={handleSubmit}
         running={mode === "running"}
+        providerOk={providerOk}
       />
-      <StatusLine theme={theme} mode={tuiMode} hiddenAbove={win.hiddenAbove} />
+      <StatusLine
+        theme={theme}
+        mode={tuiMode}
+        hiddenAbove={win.hiddenAbove}
+        cwd={basename(process.cwd())}
+        version={VERSION}
+        ctxRatio={usage ? usage.ratio : null}
+      />
     </Box>
   );
 }
