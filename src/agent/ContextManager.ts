@@ -1,6 +1,8 @@
 import type { Message } from "../types.js";
 
 const TOKEN_ESTIMATE_RATIO = 3.5;
+/** Each message carries framing tokens (role markers, delimiters) beyond its text. */
+const PER_MESSAGE_OVERHEAD = 4;
 
 export class ContextManager {
   private messages: Message[] = [];
@@ -73,7 +75,7 @@ export class ContextManager {
   }
 
   private totalTokens(): number {
-    return this.messages.reduce((sum, m) => sum + this.estimateTokens(m.content), 0);
+    return this.messages.reduce((sum, m) => sum + this.estimateTokens(m.content) + PER_MESSAGE_OVERHEAD, 0);
   }
 
   /** Index of the first non-notice user message (the original task), or -1. */

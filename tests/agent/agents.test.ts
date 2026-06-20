@@ -47,10 +47,11 @@ describe("AgentRegistry", () => {
     expect((await toAgentConfig(defaultConfig(), { agent: "plan" })).agent?.id).toBe("plan");
   });
 
-  it("passes the context window to the provider as numCtx (Phase 0 num_ctx fix)", async () => {
+  it("sends a num_ctx that leaves output headroom (input budget + num_predict)", async () => {
     const conf = await toAgentConfig(defaultConfig(), {});
-    expect(conf.provider.numCtx).toBe(conf.maxContextTokens);
-    expect(conf.provider.numCtx).toBe(24576);
+    // num_ctx is the TOTAL window; it must exceed the input budget by the output reserve.
+    expect(conf.provider.numCtx).toBe(conf.maxContextTokens + conf.provider.maxTokens);
+    expect(conf.provider.numCtx).toBe(24576 + 8192);
   });
 
   it("the removed cli agent no longer resolves", async () => {
