@@ -106,7 +106,7 @@ Rules for tools:
 - `exitCode` should reflect the actual process exit code when wrapping shell commands
 - Coerce all args with `String(args.x ?? "")` / `Number(args.x ?? default)` — model may pass wrong types
 - Set realistic timeouts on all shell/network calls; default bash timeout is 30s
-- Tools must be stateless — no shared mutable state between executions
+- Tools must be stateless — no shared mutable state between executions. **Exception:** the session working directory (`src/tools/session.ts`). A terminal is inherently stateful, so `bash` persists `cd` across calls and the file tools resolve relative paths against it (`resolveSessionPath`). Tests reset it via `resetSessionCwd()`.
 
 ## TypeScript conventions
 
