@@ -58,6 +58,12 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private cancelled = false;
   /** Whether the "that's a status, not a finished task" nudge has fired this run (cap: once). */
   private answerNudged = false;
+  /** Whether a mutation tool actually ran this run (gates the verification step). */
+  private mutationRan = false;
+  /** Whether the pre-answer verification step has fired this run (cap: once). */
+  private verifiedOnce = false;
+  /** Whether the best-effort failure recovery turn has fired this run (cap: once). */
+  private recoveredOnce = false;
   /** Interactive handler for the ask_user tool (provided by the TUI). */
   private askUserHandler?: (question: string) => Promise<string>;
 
@@ -197,6 +203,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     }
     try {
       this.session.recordTool(name, args);
+      if (MUTATION_TOOLS.has(name)) this.mutationRan = true;
       return await tool.execute(args);
     } catch (err: unknown) {
       return { success: false, data: "", error: toErrorMessage(err) };
@@ -271,6 +278,9 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.running = true;
     this.cancelled = false;
     this.answerNudged = false;
+    this.mutationRan = false;
+    this.verifiedOnce = false;
+    this.recoveredOnce = false;
     try {
       return await this.runLoopInner(startTime);
     } finally {
@@ -336,6 +346,24 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
           });
           continue;
         }
+        // Verification gate: before accepting the first <answer> on a build run that
+        // actually changed something, make the model confirm the work exists/works
+        // with a tool instead of trusting a claim. Fires at most once per run.
+        if (
+          !this.verifiedOnce &&
+          this.mutationRan &&
+          step < this.config.maxSteps &&
+          this.agent !== undefined &&
+          !this.agent.readonly
+        ) {
+          this.verifiedOnce = true;
+          this.ctx.add({
+            role: "user",
+            content:
+              "[VERIFY] Before finishing, confirm the work actually happened: for each thing the task asked for, check it exists and is correct using a tool (read_file, bash ls/cat, or run_tests). If anything is missing or broken, fix it now. Then give your final <answer>.",
+          });
+          continue;
+        }
         const durationMs = Date.now() - startTime;
         await this.logger.logAnswer(parsed.answer);
         this.emit("answer", { text: parsed.answer, steps: step, durationMs });
@@ -381,6 +409,17 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
         const fails = (failureCounts.get(name) ?? 0) + 1;
         failureCounts.set(name, fails);
         if (fails >= 3) {
+          // Best-effort recovery: instead of a dead-end abort, give the model ONE
+          // chance to change approach, ask the user, or summarise what it achieved.
+          if (!this.recoveredOnce && step < this.config.maxSteps) {
+            this.recoveredOnce = true;
+            failureCounts.set(name, 0); // clear the streak so the recovery turn isn't aborted on entry
+            this.ctx.add({
+              role: "user",
+              content: `[RECOVERY] ${name} has failed 3 times — stop repeating it. Do ONE of: (a) use a different tool or approach, (b) call ask_user if you are missing information, or (c) give an <answer> summarising what you accomplished and what remains. Do not call ${name} the same way again.`,
+            });
+            continue;
+          }
           const err = new LoopDetectedError(name);
           const msg = `Tool ${name} failed 3 times consecutively`;
           this.emit("error", { error: err, stepIndex: step });

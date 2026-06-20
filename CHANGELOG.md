@@ -9,6 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
 
+### Added (Phase 3: enforce completion / self-correction)
+- **`run_tests` tool** — runs the project's test suite (auto-detects `npm`/`pnpm`/`yarn test`, `pytest`, `cargo test`, or `make test`) in the session cwd and reports a normalized PASS/FAIL. The verification primitive the agent uses to check its own work.
+- **Verification gate** — before accepting the *first* `<answer>` on a build run that actually mutated something, the loop injects one `[VERIFY]` turn making the model confirm the deliverables exist/work with a tool. Fires at most once per run; read-only/plan answers and non-mutating runs pass straight through.
+- **Best-effort recovery** — three consecutive failures of a tool no longer dead-end with an error string; the loop injects one `[RECOVERY]` turn (switch approach / `ask_user` / summarize what was done). Still hard-aborts if failures continue after the single recovery turn.
+
+### Added (Phase 2: make dynamism measurable)
+- **Trajectory scoring in the e2e harness** — each run records reasoning turns, tool calls, tool errors, repeated (wheel-spinning) calls, and clarifications, surfaced as `Turns`/`Tools` columns so a short solve and a long thrash no longer score identically.
+- **Regression baseline** — `tests/e2e/baseline.json` plus `--update-baseline` and `--compare`; the suite exits non-zero if any scenario's pass-rate drops vs the baseline (and warns when a scenario gets materially slower).
+
 ### Added (Phase 0–1: correctness + deterministic reliability wins)
 - **Few-shot exemplar in the system prompt** — one worked Thought→tool_call→[TOOL RESULT]→answer trajectory that also models "answer only after the result confirms success". On by default; toggle with `"fewShot": false` in config to A/B it.
 
