@@ -15,6 +15,33 @@ export interface Line {
 
 const MAX_TOOL_LINES = 20;
 
+/**
+ * Render markdown-ish text to styled lines: fenced code blocks in the tool
+ * colour, headings in the accent (bold), everything else in the assistant colour.
+ */
+export function markdownLines(text: string, width: number, theme: Theme): Line[] {
+  const out: Line[] = [];
+  let inCode = false;
+  for (const raw of text.split("\n")) {
+    if (/^\s*```/.test(raw)) {
+      inCode = !inCode;
+      out.push({ text: raw, color: theme.muted });
+      continue;
+    }
+    if (inCode) {
+      for (const w of wrapText(raw, width)) out.push({ text: w, color: theme.toolName });
+      continue;
+    }
+    const heading = raw.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      for (const w of wrapText(heading[2], width)) out.push({ text: w, color: theme.accent, bold: theme.bold });
+      continue;
+    }
+    for (const w of wrapText(raw, width)) out.push({ text: w, color: theme.assistant });
+  }
+  return out;
+}
+
 /** Hard-wrap text to width, preserving explicit newlines. */
 export function wrapText(text: string, width: number): string[] {
   const w = width > 0 ? width : 80;
@@ -45,7 +72,7 @@ function entryLines(entry: Entry, width: number, theme: Theme): Line[] {
       wrapText(entry.text, width - 2).forEach((l, i) => push((i === 0 ? "● " : "  ") + l, theme.muted));
       break;
     case "answer":
-      wrapText(entry.text, width).forEach((l) => push(l, theme.assistant));
+      lines.push(...markdownLines(entry.text, width, theme));
       break;
     case "error":
       wrapText(entry.text, width - 2).forEach((l, i) => push((i === 0 ? "✗ " : "  ") + l, theme.error));
@@ -93,7 +120,7 @@ export function flattenConversation(
     if (entry.kind === "answer" || entry.kind === "error") lines.push({ text: "", color: theme.muted });
   }
   if (live) {
-    for (const l of wrapText(live, width)) lines.push({ text: l, color: theme.assistant });
+    lines.push(...markdownLines(live, width, theme));
   }
   return lines;
 }

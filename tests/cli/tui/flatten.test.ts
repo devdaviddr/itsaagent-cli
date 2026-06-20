@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wrapText, flattenConversation, windowLines } from "../../../src/cli/tui/layout/flatten.js";
+import { wrapText, flattenConversation, windowLines, markdownLines } from "../../../src/cli/tui/layout/flatten.js";
 import { conversationReducer, initialConversation, type ConvAction } from "../../../src/cli/tui/state/conversation.js";
 import { resolveTheme } from "../../../src/cli/tui/theme.js";
 
@@ -65,5 +65,19 @@ describe("windowLines — line-level scrolling", () => {
     const w = windowLines(lines.slice(0, 3), 10, 0);
     expect(w.lines).toHaveLength(3);
     expect(w.hiddenAbove).toBe(0);
+  });
+});
+
+describe("markdownLines styling", () => {
+  it("colours code fences, headings, and prose distinctly", () => {
+    const md = "# Title\nsome prose\n```js\ncode();\n```";
+    const out = markdownLines(md, 80, theme);
+    const heading = out.find((l) => l.text === "Title");
+    const code = out.find((l) => l.text === "code();");
+    const prose = out.find((l) => l.text === "some prose");
+    expect(heading?.color).toBe(theme.accent);
+    expect(heading?.bold).toBe(theme.bold);
+    expect(code?.color).toBe(theme.toolName);
+    expect(prose?.color).toBe(theme.assistant);
   });
 });

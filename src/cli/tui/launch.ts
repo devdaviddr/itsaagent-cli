@@ -28,12 +28,15 @@ export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
   }));
   const resolveAgent = (name: string) => registry.get(name);
 
-  const { render, preserveScreen } = await import("tuir");
+  const { render, preserveScreen, setMouseReporting } = await import("tuir");
   const { createElement } = await import("react");
   const { App } = await import("./App.js");
 
   // preserveScreen() saves/restores the terminal (alternate-screen equivalent).
   preserveScreen();
+  // Enable mouse/trackpad wheel scroll (note: this captures mouse events, so
+  // native terminal text-selection is disabled while the TUI is open).
+  setMouseReporting(true);
   const { waitUntilExit } = render(
     createElement(App, {
       runtime: opts.runtime,

@@ -397,7 +397,15 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const isEmpty = conv.entries.length === 0 && mode !== "running";
 
   return (
-    <Box flexDirection="column" height={appHeight} width={width} paddingX={1} backgroundColor={theme.background}>
+    <Box
+      flexDirection="column"
+      height={appHeight}
+      width={width}
+      paddingX={1}
+      backgroundColor={theme.background}
+      onScrollUp={() => dispatch({ type: "scrollUp", lines: 3 })}
+      onScrollDown={() => dispatch({ type: "scrollDown", lines: 3 })}
+    >
       <Box flexGrow={1} flexDirection="column" overflow="hidden" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
         {isEmpty ? (
           <Banner theme={theme} />
