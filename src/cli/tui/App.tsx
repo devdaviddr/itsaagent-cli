@@ -157,11 +157,19 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     }
     const buildDef = resolveAgent("build");
     if (!buildDef) return;
-    runtime.setAgent(buildDef);
     setAgentId("build");
-    firstRef.current = true; // fresh build context, seeded with the plan
+    // Build continues the session after the handoff; later messages use continueChat.
+    firstRef.current = false;
+    cancelArmedRef.current = false;
     dispatch({ type: "notice", text: "→ Handed off to build — implementing the plan." });
-    runTurn("Implement the plan above.", `Implement this plan and make the changes:\n\n${plan}`);
+    dispatch({ type: "user", text: "Implement the plan above." });
+    dispatch({ type: "scrollToTail" });
+    setMode("running");
+    // The runtime seeds build with the plan + a compact summary of what plan examined.
+    runtime.handoffToBuild(buildDef, plan).catch((err: unknown) => {
+      dispatch({ type: "error", text: err instanceof Error ? err.message : String(err) });
+      setMode("idle");
+    });
   }
 
   async function runCommand(cmd: ChatCommand): Promise<void> {

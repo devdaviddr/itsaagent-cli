@@ -46,6 +46,12 @@ export class ContextManager {
     this.evictedTotal = 0;
   }
 
+  /** Fully reset the context to a single fresh system message (used on agent handoff). */
+  reset(systemContent: string): void {
+    this.messages = [{ role: "system", content: systemContent, timestamp: Date.now() }];
+    this.evictedTotal = 0;
+  }
+
   usage(): { total: number; max: number; ratio: number } {
     const total = this.totalTokens();
     return { total, max: this.maxTokens, ratio: Math.round((total / this.maxTokens) * 100) };
