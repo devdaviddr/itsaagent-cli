@@ -15,9 +15,15 @@ pnpm install             # install dependencies
 pnpm build               # compile TypeScript → dist/
 pnpm typecheck           # type-check without emitting
 pnpm dev -- run "task"   # run without building (tsx watch)
-pnpm test                # run the Vitest suite
+pnpm test                # run the Vitest unit suite (pure logic, no model)
+pnpm e2e                 # run the live end-to-end suite (real model; see tests/e2e/)
 pnpm add -g .            # install/update the global `iaa` binary
 ```
+
+`pnpm test` is fast and deterministic (no model). `pnpm e2e` drives the real
+runtime against a live Ollama model and asserts on real effects (files created,
+context remembered, plan→build handoff). It is slow and model-dependent — run
+it before a release. See `tests/e2e/README.md`.
 
 After any source change: `pnpm build && pnpm add -g .`
 
