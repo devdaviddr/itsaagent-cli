@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 > Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
 
 ### Added
+- **Session persistence & resume** — chat sessions now autosave to `~/.config/ai-cli/sessions/<id>.json` after every turn (in `iaa chat`, the no-arg TUI, and `iaa run -i`). `iaa sessions` lists them (id, age, agent/model, turn count, title); `iaa chat --resume [id]` resumes one (latest if no id) — restoring the full context, tool history, agent, model, and working directory. Complements `/save` (human-readable transcript export). Built on `SessionStore` + `Session.toJSON()`/restore via `AgentConfig.restore`.
 - **Save the full chat session to a file** — `/save [path]` in `iaa chat` and the TUI writes the entire session transcript (metadata, agent path, and every message in context: user turns, assistant replies, tool results, notices, system prompt) as Markdown. Defaults to `<logDir>/session-<id>-<stamp>.md`; pass a path to choose the location.
 
 ### Fixed

@@ -15,8 +15,10 @@ import { saveSessionTranscript } from "./saveTranscript.js";
 export async function runChatSession(runtime: AgentRuntime): Promise<void> {
   const registry = await AgentRegistry.create();
   console.error(chalk.dim(`  ${runtime.agentId} agent · /help for commands · /exit to leave\n`));
-  runtime.initSession();
-  let first = true;
+  // A resumed session already has history — keep it; otherwise seed the system prompt.
+  const resumed = runtime.session.hasHistory;
+  if (!resumed) runtime.initSession();
+  let first = !resumed;
 
   while (true) {
     const input = await text({ message: `${runtime.agentId} ›` });

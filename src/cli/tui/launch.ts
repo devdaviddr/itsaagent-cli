@@ -7,7 +7,8 @@ import type { AgentRuntime } from "../../agent/AgentRuntime.js";
 import { AgentRegistry } from "../../agent/AgentRegistry.js";
 import { BUILTIN_AGENT_IDS } from "../../agent/AgentDefinition.js";
 import { AgentRuntime as Runtime } from "../../agent/AgentRuntime.js";
-import { loadConfig, toAgentConfig } from "../config.js";
+import { SessionStore } from "../../agent/SessionStore.js";
+import { loadConfig, toAgentConfig, SESSIONS_DIR } from "../config.js";
 import type { AppAgentInfo } from "./App.js";
 import type { ThemeOverrides } from "./theme.js";
 
@@ -60,6 +61,8 @@ export async function launchHomeTui(): Promise<void> {
   const conf = await loadConfig();
   const agentConfig = await toAgentConfig(conf, {});
   const runtime = new Runtime(agentConfig);
+  const store = new SessionStore(SESSIONS_DIR);
+  runtime.on("answer", () => { void store.save(runtime.session); });
   const { ok } = await runtime.checkProvider();
   await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme, mouse: conf.mouse });
 }

@@ -59,6 +59,12 @@ export class ContextManager {
     this.evictedTotal = 0;
   }
 
+  /** Replace all messages — used to restore a saved session. */
+  load(messages: Message[]): void {
+    this.messages = messages.map((m) => ({ ...m }));
+    this.evictedTotal = 0;
+  }
+
   /** Replace the system prompt in place, preserving all conversation history.
    * Used to rebuild the prompt once the model's native-tool capability is known. */
   setSystemPrompt(content: string): void {

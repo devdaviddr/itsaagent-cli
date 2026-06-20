@@ -8,6 +8,8 @@ import { resolveModelProfile } from "../providers/modelProfiles.js";
 
 export const CONFIG_DIR = join(homedir(), ".config", "ai-cli");
 export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+/** Where persisted chat sessions live (for `iaa chat --resume` / `iaa sessions`). */
+export const SESSIONS_DIR = join(CONFIG_DIR, "sessions");
 
 export interface CliConfig {
   providerType: "ollama" | "openai-compat";
