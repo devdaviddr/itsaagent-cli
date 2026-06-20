@@ -71,11 +71,18 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     super();
     this.config = config;
     this.provider = createProvider(config.provider);
+    const r = config.restore;
     this.session = new Session({
+      id: r?.id,
+      title: r?.title,
+      createdAt: r?.createdAt,
       agent: config.agent,
       model: config.provider.model,
-      cwd: process.cwd(),
+      cwd: r?.cwd ?? process.cwd(),
       maxTokens: config.maxContextTokens,
+      messages: r?.messages,
+      toolHistory: r?.toolHistory,
+      transitions: r?.transitions,
       onEvict: (evicted) => {
         this.emit("context:evict", { evicted, ratio: this.session.ctx.usage().ratio });
       },

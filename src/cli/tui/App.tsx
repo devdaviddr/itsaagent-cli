@@ -102,7 +102,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   useAgentEvents(runtime, dispatch, { onUsage: setUsage, onIdle: () => setMode("idle") });
 
   useEffect(() => {
-    runtime.initSession();
+    // A resumed session already has history — don't wipe it; otherwise seed the prompt.
+    if (!runtime.session.hasHistory) runtime.initSession();
     // When the agent calls ask_user, show the question and pause for the answer.
     runtime.setAskUserHandler((question) => {
       dispatch({ type: "notice", text: `? ${question}` });

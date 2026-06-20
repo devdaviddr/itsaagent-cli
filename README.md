@@ -76,6 +76,8 @@ iaa
 iaa                  Launch the persistent TUI (scrollable log, input box, slash commands)
 iaa run <task...>    Execute a one-shot task (prefix /skill-name to run a skill; -i opens the TUI)
 iaa chat             Persistent multi-turn TUI session (keeps context; slash commands below)
+iaa chat --resume    Resume the latest saved session (or --resume <id> for a specific one)
+iaa sessions         List saved chat sessions (resume one with --resume <id>)
 iaa agents           List available agents and their tool access
 iaa tools [name]     List built-in tools, or show full detail for one
 iaa skills           List installed skills

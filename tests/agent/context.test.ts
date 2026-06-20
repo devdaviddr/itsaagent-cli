@@ -30,12 +30,14 @@ describe("ContextManager", () => {
   });
 
   it("trims old tool results but keeps system and original task", () => {
-    // 3.5 chars/token. limit 20 tokens = 70 chars
-    const ctx = new ContextManager(20);
-    ctx.add({ role: "system", content: "system" });           // ~2 tokens
-    ctx.add({ role: "user", content: "task" });               // ~2 tokens
-    ctx.add({ role: "user", content: "a".repeat(30) });       // ~9 tokens - tool result
-    ctx.add({ role: "user", content: "b".repeat(30) });       // ~9 tokens - tool result
+    // 3.5 chars/token + per-message overhead. Budget 200 tokens; each big tool
+    // result is ~104 tokens, so the two together (+ the eviction notice) exceed
+    // the budget and the oldest is dropped while the newest survives.
+    const ctx = new ContextManager(200);
+    ctx.add({ role: "system", content: "system" });
+    ctx.add({ role: "user", content: "task" });               // original task (pinned)
+    ctx.add({ role: "user", content: "a".repeat(350) });      // oldest tool result
+    ctx.add({ role: "user", content: "b".repeat(350) });      // newest tool result
 
     const msgs = ctx.get();
     // System prompt must be preserved
@@ -44,7 +46,28 @@ describe("ContextManager", () => {
     expect(msgs.find((m) => m.content === "task")).toBeDefined();
     // The newest tool result should survive over the oldest
     const contents = msgs.map((m) => m.content);
-    expect(contents).toContain("b".repeat(30));
+    expect(contents).toContain("b".repeat(350));
+    expect(contents).not.toContain("a".repeat(350));
+  });
+
+  it("folds the work-so-far digest into the eviction notice (summarize-on-evict)", () => {
+    const ctx = new ContextManager(200, undefined, undefined, () => "- Files written/edited: server.js");
+    ctx.add({ role: "system", content: "system" });
+    ctx.add({ role: "user", content: "build it" });
+    ctx.add({ role: "user", content: "x".repeat(900) }); // forces an eviction
+    const notice = ctx.get().find((m) => m.notice);
+    expect(notice).toBeDefined();
+    expect(notice?.content).toMatch(/Work so far/);
+    expect(notice?.content).toContain("server.js"); // survives even though raw output was trimmed
+  });
+
+  it("omits the digest section when nothing was examined", () => {
+    const ctx = new ContextManager(200, undefined, undefined, () => "- (nothing was examined during planning)");
+    ctx.add({ role: "system", content: "system" });
+    ctx.add({ role: "user", content: "task" });
+    ctx.add({ role: "user", content: "y".repeat(900) });
+    const notice = ctx.get().find((m) => m.notice);
+    expect(notice?.content).not.toMatch(/Work so far/);
   });
 
   it("clear() keeps the system message only", () => {

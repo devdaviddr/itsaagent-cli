@@ -8,6 +8,8 @@ import { resolveModelProfile } from "../providers/modelProfiles.js";
 
 export const CONFIG_DIR = join(homedir(), ".config", "ai-cli");
 export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+/** Where persisted chat sessions live (for `iaa chat --resume` / `iaa sessions`). */
+export const SESSIONS_DIR = join(CONFIG_DIR, "sessions");
 
 export interface CliConfig {
   providerType: "ollama" | "openai-compat";
@@ -87,15 +89,17 @@ export async function toAgentConfig(
   // Per-model profile supplies defaults; explicit config values override them.
   const profile = resolveModelProfile(model);
 
+  const numPredict = conf.numPredict ?? profile.numPredict;
   const providerConfig: ProviderConfig = {
     type: conf.providerType,
     baseUrl: opts.host ?? conf.host,
     model,
     temperature: conf.temperature ?? profile.temperature,
-    maxTokens: conf.numPredict ?? profile.numPredict,
-    // Ask the model server for the full context window we manage client-side, so
-    // it doesn't silently truncate to its small default (Ollama num_ctx).
-    numCtx: conf.maxContextTokens,
+    maxTokens: numPredict,
+    // num_ctx is the TOTAL window (prompt + generation). maxContextTokens is the
+    // input budget we trim to, so the full window must also leave room for the
+    // response — otherwise Ollama truncates the prompt we worked to preserve.
+    numCtx: conf.maxContextTokens + numPredict,
     stop: conf.stop ?? profile.stop,
   };
 

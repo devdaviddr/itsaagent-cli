@@ -1,5 +1,6 @@
 import { ContextManager } from "./ContextManager.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
+import type { Message } from "../types.js";
 
 export interface ToolHistoryEntry {
   name: string;
@@ -12,6 +13,20 @@ export interface AgentTransition {
   at: number;
 }
 
+/** On-disk shape of a session (for persistence / resume). */
+export interface SerializedSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  model: string;
+  agentId: string;
+  cwd: string;
+  messages: Message[];
+  toolHistory: ToolHistoryEntry[];
+  transitions: AgentTransition[];
+}
+
 let counter = 0;
 function newId(): string {
   counter += 1;
@@ -21,12 +36,17 @@ function newId(): string {
 export interface SessionOptions {
   id?: string;
   title?: string;
+  createdAt?: number;
   agent?: AgentDefinition;
   model: string;
   cwd: string;
   maxTokens: number;
   onEvict?: (count: number) => void;
   onUsage?: (usage: { total: number; max: number; ratio: number }) => void;
+  /** Restore prior context/history (resume a saved session). */
+  messages?: Message[];
+  toolHistory?: ToolHistoryEntry[];
+  transitions?: AgentTransition[];
 }
 
 /**
@@ -50,11 +70,45 @@ export class Session {
   constructor(opts: SessionOptions) {
     this.id = opts.id ?? newId();
     this.title = opts.title ?? "Untitled session";
-    this.createdAt = Date.now();
+    this.createdAt = opts.createdAt ?? Date.now();
     this.agent = opts.agent;
     this.model = opts.model;
     this.cwd = opts.cwd;
-    this.ctx = new ContextManager(opts.maxTokens, opts.onEvict, opts.onUsage);
+    // The digest is built from toolHistory (which is never trimmed), so "what was
+    // done" survives in the eviction notice even after raw tool results are evicted.
+    this.ctx = new ContextManager(opts.maxTokens, opts.onEvict, opts.onUsage, () => this.examinedSummary());
+    // Restore prior state when resuming a saved session.
+    if (opts.messages?.length) this.ctx.load(opts.messages);
+    if (opts.toolHistory?.length) this.toolHistory.push(...opts.toolHistory);
+    if (opts.transitions?.length) this.transitions.push(...opts.transitions);
+  }
+
+  /** True once the session has more than just its system prompt (resumed or used). */
+  get hasHistory(): boolean {
+    return this.ctx.get().some((m) => m.role !== "system");
+  }
+
+  /** Serialize for persistence. `title` is derived from the first user turn if unset. */
+  toJSON(): SerializedSession {
+    const firstUser = this.ctx.get().find((m) => m.role === "user" && !m.content.startsWith("[TOOL RESULT"));
+    const title =
+      this.title !== "Untitled session"
+        ? this.title
+        : firstUser
+          ? firstUser.content.replace(/\s+/g, " ").slice(0, 60)
+          : this.title;
+    return {
+      id: this.id,
+      title,
+      createdAt: this.createdAt,
+      updatedAt: Date.now(),
+      model: this.model,
+      agentId: this.agentId,
+      cwd: this.cwd,
+      messages: this.ctx.get(),
+      toolHistory: [...this.toolHistory],
+      transitions: [...this.transitions],
+    };
   }
 
   /** Active agent id, or "default" when the session is unscoped. */
