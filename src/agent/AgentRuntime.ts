@@ -82,6 +82,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       model: config.provider.model,
       cwd: r?.cwd ?? process.cwd(),
       maxTokens: config.maxContextTokens,
+      compaction: config.compaction,
+      compactionThreshold: config.compactionThreshold,
       messages: r?.messages,
       toolHistory: r?.toolHistory,
       transitions: r?.transitions,
@@ -303,6 +305,37 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     );
   }
 
+  /** Optional LLM compaction: when over threshold in "summarize" mode, fold the
+   * older turns into one pinned summary via a single no-tools model call. The
+   * deterministic structured pass (in ContextManager) runs regardless. */
+  private async maybeSummarize(): Promise<void> {
+    if (this.config.compaction !== "summarize") return;
+    const threshold = (this.config.compactionThreshold ?? 0.8) * 100;
+    if (this.ctx.usage().ratio < threshold) return;
+    const RECENT = 6;
+    const { text, count } = this.ctx.olderMessagesText(RECENT);
+    if (count < 4) return; // not enough history to be worth a call
+    try {
+      let summary = "";
+      const messages = [
+        {
+          role: "system",
+          content:
+            "Summarize the conversation so far into a compact set of durable facts: the goal, decisions made, files/paths involved, what has been done, and what remains. Preserve specifics (names, paths, values). Output only the summary.",
+        },
+        { role: "user", content: text },
+      ];
+      for await (const chunk of this.provider.stream(messages)) {
+        summary += chunk.delta;
+        if (this.cancelled) return;
+      }
+      summary = summary.replace(/<\/?thought>|<\/?answer>/g, "").trim();
+      if (summary) this.ctx.foldOlder(summary, RECENT);
+    } catch {
+      // summarization is best-effort — the structured pass already bounded the context
+    }
+  }
+
   private async runLoop(startTime: number): Promise<string> {
     this.running = true;
     this.cancelled = false;
@@ -313,6 +346,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     // detectToolUse() has run in every caller by now — align the prompt to the mode.
     this.refreshSystemPrompt();
     try {
+      await this.maybeSummarize();
       return await this.runLoopInner(startTime);
     } finally {
       this.running = false;

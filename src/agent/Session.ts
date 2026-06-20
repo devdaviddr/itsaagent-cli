@@ -1,5 +1,6 @@
 import { ContextManager } from "./ContextManager.js";
 import type { AgentDefinition } from "./AgentDefinition.js";
+import type { CompactionMode } from "./compaction.js";
 import type { Message } from "../types.js";
 
 export interface ToolHistoryEntry {
@@ -47,6 +48,8 @@ export interface SessionOptions {
   messages?: Message[];
   toolHistory?: ToolHistoryEntry[];
   transitions?: AgentTransition[];
+  compaction?: CompactionMode;
+  compactionThreshold?: number;
 }
 
 /**
@@ -76,7 +79,14 @@ export class Session {
     this.cwd = opts.cwd;
     // The digest is built from toolHistory (which is never trimmed), so "what was
     // done" survives in the eviction notice even after raw tool results are evicted.
-    this.ctx = new ContextManager(opts.maxTokens, opts.onEvict, opts.onUsage, () => this.examinedSummary());
+    this.ctx = new ContextManager(
+      opts.maxTokens,
+      opts.onEvict,
+      opts.onUsage,
+      () => this.examinedSummary(),
+      opts.compaction,
+      opts.compactionThreshold,
+    );
     // Restore prior state when resuming a saved session.
     if (opts.messages?.length) this.ctx.load(opts.messages);
     if (opts.toolHistory?.length) this.toolHistory.push(...opts.toolHistory);

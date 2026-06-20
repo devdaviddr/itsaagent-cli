@@ -28,6 +28,8 @@ export interface Message {
   timestamp: number;
   /** Runtime-injected context notice (e.g. eviction warning). Pinned, never logged. */
   notice?: boolean;
+  /** Kept from eviction (e.g. a conversation summary that folded older turns). */
+  pinned?: boolean;
 }
 
 export interface ProviderConfig {
@@ -71,6 +73,9 @@ export interface AgentConfig {
   fewShot?: boolean;
   /** Auto-load the nearest AGENTS.md into the prompt (default true). */
   projectContext?: boolean;
+  /** Context compaction mode + the window fraction that triggers it. */
+  compaction?: import("./agent/compaction.js").CompactionMode;
+  compactionThreshold?: number;
   /** Restore a saved session (resume) instead of starting fresh. */
   restore?: import("./agent/Session.js").SerializedSession;
 }

@@ -1,4 +1,5 @@
 import type { Message } from "../types.js";
+import { compactMessages, type CompactionMode } from "./compaction.js";
 
 const TOKEN_ESTIMATE_RATIO = 3.5;
 /** Each message carries framing tokens (role markers, delimiters) beyond its text. */
@@ -14,21 +15,33 @@ export class ContextManager {
   /** Deterministic "work so far" digest, folded into the eviction notice so it
    * survives even when raw tool results are trimmed. */
   private summarize?: () => string;
+  /** Proactive compaction mode + the fraction of the window that triggers it. */
+  private compaction: CompactionMode;
+  private compactionThreshold: number;
 
   constructor(
     maxTokens: number,
     onEvict?: (count: number) => void,
     onUsage?: (usage: { total: number; max: number; ratio: number }) => void,
     summarize?: () => string,
+    compaction: CompactionMode = "off",
+    compactionThreshold = 0.8,
   ) {
     this.maxTokens = maxTokens;
     this.onEvict = onEvict;
     this.onUsage = onUsage;
     this.summarize = summarize;
+    this.compaction = compaction;
+    this.compactionThreshold = compactionThreshold;
   }
 
   add(msg: Omit<Message, "timestamp">): void {
     this.messages.push({ ...msg, timestamp: Date.now() });
+    // Proactively compress (shrink old tool results, drop superseded reads) once
+    // the window is filling, so we keep meaning instead of evicting whole turns.
+    if (this.compaction !== "off" && this.totalTokens() / this.maxTokens >= this.compactionThreshold) {
+      this.runCompaction();
+    }
     const evicted = this.trim();
     if (evicted > 0) {
       this.evictedTotal += evicted;
@@ -98,8 +111,52 @@ export class ContextManager {
   private isPinned(msg: Message, index: number): boolean {
     if (msg.role === "system") return true;
     if (msg.notice) return true;
+    if (msg.pinned) return true;
     if (index === this.firstTaskIndex()) return true;
     return false;
+  }
+
+  /** The older (non-pinned, non-recent) messages as text — input for summarization. */
+  olderMessagesText(recentWindow: number): { text: string; count: number } {
+    const recentStart = Math.max(0, this.messages.length - recentWindow);
+    const parts: string[] = [];
+    this.messages.forEach((m, i) => {
+      if (this.isPinned(m, i) || i >= recentStart) return;
+      parts.push(`[${m.role}] ${m.content}`);
+    });
+    return { text: parts.join("\n\n"), count: parts.length };
+  }
+
+  /** Replace the older messages with a single pinned conversation summary. */
+  foldOlder(summary: string, recentWindow: number): boolean {
+    const recentStart = Math.max(0, this.messages.length - recentWindow);
+    let removed = 0;
+    const kept: Message[] = [];
+    this.messages.forEach((m, i) => {
+      if (!this.isPinned(m, i) && i < recentStart) {
+        removed++;
+        return;
+      }
+      kept.push(m);
+    });
+    if (removed === 0) return false;
+    const summaryMsg: Message = {
+      role: "user",
+      content: `[CONVERSATION SUMMARY of ${removed} earlier message(s)]\n${summary}`,
+      timestamp: Date.now(),
+      pinned: true,
+    };
+    // Insert right after the original task (first non-notice user message), else after system.
+    const taskPos = kept.findIndex((m) => m.role === "user" && !m.notice && !m.pinned);
+    kept.splice(taskPos === -1 ? Math.min(1, kept.length) : taskPos + 1, 0, summaryMsg);
+    this.messages = kept;
+    return true;
+  }
+
+  /** Structured compaction: shrink old tool results / drop superseded reads in place. */
+  private runCompaction(): void {
+    const { messages, changed } = compactMessages(this.messages, (i) => this.isPinned(this.messages[i], i));
+    if (changed) this.messages = messages;
   }
 
   /** Evict oldest non-pinned messages until within budget. Returns count evicted. */
