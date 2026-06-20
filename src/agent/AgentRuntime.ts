@@ -234,8 +234,9 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const cwd = process.cwd();
     const startTime = Date.now();
 
-    this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }) });
+    // reset() (not clear()+add) so a prior initSession()'s system prompt isn't
+    // left in place, which would duplicate the system message on the first turn.
+    this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }));
     this.ctx.add({ role: "user", content: task });
 
     await this.detectToolUse();

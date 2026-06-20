@@ -93,6 +93,7 @@ Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; �
 /model          switch model — opens a picker (persists)
 /theme          switch theme — opens a picker (persists)
 /guided <task>  plan a task (clarify ambiguities), then Tab → hand off to build
+/save [path]    save the full session transcript to a file (default: log dir)
 /tools          browse tools — pick one to read its parameters
 /about          version, licence, author
 /help           show available commands

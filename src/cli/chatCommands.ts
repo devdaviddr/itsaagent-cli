@@ -13,6 +13,7 @@ export type ChatCommand =
   | { kind: "tools" }
   | { kind: "about" }
   | { kind: "guided"; task: string }
+  | { kind: "save"; path: string }
   | { kind: "unknown"; cmd: string };
 
 export function parseChatInput(input: string): ChatCommand {
@@ -43,6 +44,8 @@ export function parseChatInput(input: string): ChatCommand {
       return { kind: "tools" };
     case "guided":
       return { kind: "guided", task: arg };
+    case "save":
+      return { kind: "save", path: arg };
     case "about":
     case "version":
     case "license":
@@ -72,6 +75,7 @@ export const COMMANDS: CommandMeta[] = [
   { name: "model", help: "switch model — opens a picker" },
   { name: "theme", help: "switch theme — opens a picker" },
   { name: "guided", arg: "<task>", help: "plan a task, then Tab to hand off to build" },
+  { name: "save", arg: "[path]", help: "save the full session transcript to a file" },
   { name: "tools", help: "list tools" },
   { name: "about", help: "version, licence, author" },
   { name: "clear", help: "reset the conversation" },
@@ -97,6 +101,7 @@ export const CHAT_HELP = [
   "  /model          switch model — opens a picker (persists)",
   "  /theme          switch theme — opens a picker (persists)",
   "  /guided <task>  plan a task (clarify ambiguities), then Tab → build",
+  "  /save [path]    save the full session transcript to a file (default: log dir)",
   "  /tools          list tools",
   "  /about          version, licence, and author",
   "  /clear          reset the conversation",

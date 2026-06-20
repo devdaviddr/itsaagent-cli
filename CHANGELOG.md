@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
 
+### Added
+- **Save the full chat session to a file** — `/save [path]` in `iaa chat` and the TUI writes the entire session transcript (metadata, agent path, and every message in context: user turns, assistant replies, tool results, notices, system prompt) as Markdown. Defaults to `<logDir>/session-<id>-<stamp>.md`; pass a path to choose the location.
+
+### Fixed
+- **No more duplicated system prompt on the first chat turn.** `initSession()` installed the prompt and then the first `run()` added a second one (its `clear()` keeps the existing system message), wasting ~1.5–2.5k tokens of the window and feeding the model a doubled prompt. `run()` now uses `reset()` for a single system message.
+
 ### Added (Phase 5: structural orchestration)
 - **Headless advised processes** — `iaa run --process guided "<task>"` runs the plan → build pipeline end-to-end without the TUI: the `plan` agent plans, then the runtime auto-hands the plan to `build` to execute (seeded with the plan + the compact "already explored" summary, same path as pressing Tab in the TUI). `src/agent/ProcessRunner.ts` (`runProcess`) is a small, testable stage loop over any `ProcessDef`; the run command renders each stage. Best for substantial tasks where planning helps (verified building a complete Express API); a single-line task is better run directly.
 
