@@ -39,6 +39,8 @@ export interface ProviderConfig {
   maxTokens: number;
   /** Context window (tokens) to request from the model server, e.g. Ollama num_ctx. */
   numCtx?: number;
+  /** Optional extra stop sequences. */
+  stop?: string[];
 }
 
 export interface SkillArg {

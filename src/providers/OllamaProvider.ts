@@ -41,6 +41,10 @@ export class OllamaProvider implements Provider {
   private readonly temperature: number;
   private readonly maxTokens: number;
   private readonly numCtx?: number;
+  private readonly stop?: string[];
+
+  /** Bounded retries with backoff — local servers are flaky on cold model loads. */
+  private static readonly MAX_RETRIES = 2;
 
   constructor(config: ProviderConfig) {
     this.baseUrl = config.baseUrl;
@@ -48,34 +52,53 @@ export class OllamaProvider implements Provider {
     this.temperature = config.temperature;
     this.maxTokens = config.maxTokens;
     this.numCtx = config.numCtx;
+    this.stop = config.stop;
   }
 
   async *stream(messages: ChatMessage[], tools?: ToolSpec[]): AsyncGenerator<StreamChunk> {
     const useTools = Array.isArray(tools) && tools.length > 0;
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          // Always stream so responses render token-by-token; tool_calls are
-          // accumulated across the streamed chunks below.
-          stream: true,
-          options: {
-            temperature: this.temperature,
-            num_predict: this.maxTokens,
-            // Request the full window we manage client-side; without this Ollama
-            // uses the model's small default and silently truncates our context.
-            ...(this.numCtx ? { num_ctx: this.numCtx } : {}),
-          },
-          ...(useTools ? { tools } : {}),
-        }),
-      });
-    } catch (err: unknown) {
-      throw new ProviderError(`Cannot reach Ollama at ${this.baseUrl}: ${err instanceof Error ? err.message : String(err)}`);
+    const body = JSON.stringify({
+      model: this.model,
+      messages,
+      // Always stream so responses render token-by-token; tool_calls are
+      // accumulated across the streamed chunks below.
+      stream: true,
+      options: {
+        temperature: this.temperature,
+        num_predict: this.maxTokens,
+        // Request the full window we manage client-side; without this Ollama
+        // uses the model's small default and silently truncates our context.
+        ...(this.numCtx ? { num_ctx: this.numCtx } : {}),
+        ...(this.stop && this.stop.length > 0 ? { stop: this.stop } : {}),
+      },
+      ...(useTools ? { tools } : {}),
+    });
+
+    // Retry the connection on transient failures (refused, dropped, 5xx) — the
+    // first call after a model swap/cold load often fails before the model is warm.
+    let response: Response | undefined;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= OllamaProvider.MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        if (res.status >= 500) {
+          lastErr = new ProviderError(`Ollama error (${res.status}): ${await res.text()}`, res.status);
+        } else {
+          response = res;
+          break;
+        }
+      } catch (err: unknown) {
+        lastErr = new ProviderError(`Cannot reach Ollama at ${this.baseUrl}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (attempt < OllamaProvider.MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+      }
     }
+    if (!response) throw lastErr instanceof Error ? lastErr : new ProviderError(String(lastErr));
 
     if (!response.ok || !response.body) {
       throw new ProviderError(`Ollama error (${response.status}): ${await response.text()}`, response.status);
