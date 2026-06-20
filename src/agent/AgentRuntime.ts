@@ -274,6 +274,17 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     return this.runLoop(startTime);
   }
 
+  /** Rebuild the system prompt now that native-tool capability is known, so it
+   * teaches the format the model will actually use (preserves history). */
+  private refreshSystemPrompt(): void {
+    this.ctx.setSystemPrompt(
+      buildSystemPrompt(this.permittedTools(), process.cwd(), this.agent?.systemPromptSuffix, this.config.skills, {
+        fewShot: this.config.fewShot,
+        nativeTools: this.toolUseMode === true,
+      }),
+    );
+  }
+
   private async runLoop(startTime: number): Promise<string> {
     this.running = true;
     this.cancelled = false;
@@ -281,6 +292,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.mutationRan = false;
     this.verifiedOnce = false;
     this.recoveredOnce = false;
+    // detectToolUse() has run in every caller by now — align the prompt to the mode.
+    this.refreshSystemPrompt();
     try {
       return await this.runLoopInner(startTime);
     } finally {
