@@ -13,17 +13,15 @@ interface MessageLogProps {
 }
 
 /**
- * The chat transcript: a distinct bordered, panel-coloured box. Content is
+ * The chat transcript: a distinct panel-coloured area (no border). Content is
  * pre-windowed at the line level, so it scrolls line-by-line and never overflows.
  */
 export function MessageLog({ lines, theme, rows, width }: MessageLogProps) {
   return (
     <Box
       flexDirection="column"
-      height={rows + 2}
+      height={rows}
       width={width}
-      borderStyle="round"
-      borderColor={theme.accent}
       backgroundColor={theme.panel}
       paddingX={1}
       overflow="hidden"

@@ -346,8 +346,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   // Render one row short of the terminal so total output height < rows; tuir
   // full-clears (flickers) only when output height >= rows.
   const appHeight = Math.max(8, height - 1);
-  // Reserve: chat box border (2) + input panel (3) + status (2) + palette.
-  const logRows = Math.max(3, appHeight - 8 - (paletteOpen ? matches.length : 0));
+  // Reserve: input panel (3) + status (2) + a slack row + palette.
+  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
   const allLines = flattenConversation(
     conv.entries,
     contentWidth,
