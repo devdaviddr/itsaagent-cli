@@ -271,7 +271,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.ctx.add({
       role: "user",
       content: [
-        "Implement this plan. Do exactly what it describes — create/edit the files and run the commands.",
+        "Implement this plan now by calling tools. Carry out EVERY step in order — create/edit the files and run the commands — and don't stop until all of them are done. Start immediately with the first tool call; do NOT restate the plan or describe it back. The plan may be worded loosely or for a human; translate each step into the right tool action yourself.",
         "",
         "## Plan",
         planText,
@@ -425,7 +425,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
           this.ctx.add({
             role: "user",
             content:
-              "[VERIFY] Before finishing, confirm the work actually happened: for each thing the task asked for, check it exists and is correct using a tool (read_file, bash ls/cat, or run_tests). If anything is missing or broken, fix it now. Then give your final <answer>.",
+              "[VERIFY] Do not finish a partial result. List EVERY deliverable the task/plan named — each file to create, each dependency to install, each command to run — and check each one actually exists/ran using a tool (read_file, bash ls/cat, run_tests). If ANY step was skipped or is incomplete (e.g. a package.json or npm install that never happened), do it now. Only give your final <answer> once every step is genuinely done and checked.",
           });
           continue;
         }

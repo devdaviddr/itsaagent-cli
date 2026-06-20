@@ -29,7 +29,7 @@ export const bashTool: Tool = {
       type: "object",
       properties: {
         command: { type: "string", description: "The bash command to execute" },
-        cwd: { type: "string", description: "Optional directory to run the command in (must already exist). Persists as the working directory afterwards, like cd." },
+        cwd: { type: "string", description: "Optional directory to run THIS command in (must already exist). One-off — it does not change the persistent working directory, so you can safely pass the same project dir on every call. Use `cd` inside the command to move persistently." },
         timeout: { type: "number", description: "Timeout in milliseconds (default: 30000)" },
       },
       required: ["command"],
@@ -39,7 +39,11 @@ export const bashTool: Tool = {
     const command = String(args.command ?? "");
     const timeout = Number(args.timeout ?? 30000);
     let cwd = getSessionCwd();
-    if (args.cwd !== undefined && args.cwd !== null && String(args.cwd) !== "") {
+    // An explicit cwd is a ONE-OFF: run the command there but do NOT change the
+    // persistent session cwd. (Otherwise passing the same relative cwd each call
+    // compounds: todo-api → todo-api/todo-api → …) Use `cd` to move persistently.
+    const explicitCwd = args.cwd !== undefined && args.cwd !== null && String(args.cwd) !== "";
+    if (explicitCwd) {
       const requested = resolveSessionPath(String(args.cwd));
       const info = await stat(requested).catch(() => null);
       if (!info || !info.isDirectory()) {
@@ -57,12 +61,12 @@ export const bashTool: Tool = {
         maxBuffer: 10 * 1024 * 1024,
       });
       const { output, cwd: next } = extractCwd(stdout);
-      if (next) setSessionCwd(next);
+      if (next && !explicitCwd) setSessionCwd(next);
       return { success: true, data: output, error: stderr || undefined, exitCode: 0 };
     } catch (err: unknown) {
       const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };
       const { output, cwd: next } = extractCwd(e.stdout ?? "");
-      if (next) setSessionCwd(next); // a `cd` may have succeeded before a later failure
+      if (next && !explicitCwd) setSessionCwd(next); // a `cd` may have succeeded before a later failure
       return {
         success: false,
         data: output,
