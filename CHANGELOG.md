@@ -31,6 +31,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added (Phase 0–1: correctness + deterministic reliability wins)
 - **Few-shot exemplar in the system prompt** — one worked Thought→tool_call→[TOOL RESULT]→answer trajectory that also models "answer only after the result confirms success". On by default; toggle with `"fewShot": false` in config to A/B it.
 
+### Fixed
+- **Files no longer get written as one line with literal `\n`.** Small models sometimes double-escape newlines in a tool call, so a multi-line file (e.g. an Express server) arrived as a single line containing the two characters backslash-n instead of real line breaks. write_file/append_file/edit_file now detect this exact mistake (no real newlines + 2 or more literal `\n`) and restore real newlines/tabs; genuine single-line content is left untouched. The write_file description also tells the model to use real line breaks.
+
 ### Fixed (Phase 0–1)
 - **Context window is now actually requested from Ollama (`num_ctx`).** `maxContextTokens` was trimmed client-side but never sent to the server, so Ollama silently ran at its small default window and truncated the very context the harness preserved — a root cause of forgetting/premature-stopping on multi-step tasks. It is now threaded into `ProviderConfig` and sent as `options.num_ctx`.
 - **`git` now uses the session working directory.** It ran in `process.cwd()`, so after the model `cd`'d via `bash`, `git status/add/commit` silently targeted the wrong repo. It now honours the shared session cwd like the other tools.

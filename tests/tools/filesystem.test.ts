@@ -13,6 +13,7 @@ import {
   editFileTool,
   deleteFileTool,
   downloadFileTool,
+  restoreCollapsedNewlines,
 } from "../../src/tools/filesystem.js";
 
 const TEST_DIR = join(tmpdir(), `itsaagent-test-${process.pid}`);
@@ -48,6 +49,39 @@ describe("makeDirectoryTool", () => {
     const result = await makeDirectoryTool.execute({ path });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/file already exists/i);
+  });
+});
+
+describe("restoreCollapsedNewlines (literal \\n repair)", () => {
+  it("restores a multi-statement file collapsed onto one line with literal \\n", () => {
+    const collapsed = 'const a = 1;\\nconst b = 2;\\nconsole.log(a + b);';
+    const fixed = restoreCollapsedNewlines(collapsed);
+    expect(fixed.split("\n")).toEqual(["const a = 1;", "const b = 2;", "console.log(a + b);"]);
+  });
+
+  it("also restores literal \\t and \\r\\n", () => {
+    expect(restoreCollapsedNewlines('a\\r\\nb\\n\\tc')).toBe("a\nb\n\tc");
+  });
+
+  it("leaves content with real newlines untouched (even if it also contains a literal \\n)", () => {
+    const real = "line1\nconst s = 'a\\nb';\nline3";
+    expect(restoreCollapsedNewlines(real)).toBe(real);
+  });
+
+  it("leaves a single literal \\n untouched (not enough signal — could be intended text)", () => {
+    expect(restoreCollapsedNewlines("just one \\n here")).toBe("just one \\n here");
+  });
+
+  it("write_file repairs a collapsed express server end to end", async () => {
+    const path = join(TEST_DIR, "server.js");
+    const collapsed =
+      'const express = require("express");\\nconst app = express();\\napp.get("/", (req, res) => res.send("hi"));\\napp.listen(5000);';
+    const result = await writeFileTool.execute({ path, content: collapsed });
+    expect(result.success).toBe(true);
+    const onDisk = await readFile(path, "utf-8");
+    expect(onDisk.split("\n").length).toBe(4); // real line breaks now
+    expect(onDisk).not.toContain("\\n"); // no literal backslash-n left
+    expect(onDisk).toContain('require("express")');
   });
 });
 
