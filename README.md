@@ -21,7 +21,9 @@ Built for developers who want an autonomous agent without a cloud subscription.
 - **Native tool calling** — uses Ollama's function-calling API for capable models, with a text parser as automatic fallback
 - **Sessions** — every chat runs inside a `Session` that owns its context, agent, model, and working directory; agent hand-offs happen *within* a session, so exploration and context carry across them
 - **Built-in agents** — `build` (full access) and `plan` (read-only analysis); each scopes which tools the model may call. In the TUI, `plan` produces an approach you can hand off to `build` by pressing **Tab**
-- **Guided process** — `/guided <task>` plans the work, asks you to clarify any ambiguities (`ask_user`), then hands the approach to `build` on **Tab**; the plan agent carries a compact "already explored" summary across the hand-off
+- **Guided process** — `/guided <task>` plans the work, asks you to clarify any ambiguities (`ask_user`), then hands the approach to `build` on **Tab**; the plan agent carries a compact "already explored" summary across the hand-off. Run it headless with `iaa run --process guided "<task>"`
+- **Self-verification** — before finishing a build that changed something, the agent confirms the work with a tool (read it back, `ls`, or `run_tests`) instead of trusting a claim; failures get one best-effort recovery turn rather than a dead-end
+- **Tuned for local models** — adapts the prompt to native vs text tool-calling, requests the full context window (`num_ctx`), retries on cold-start hiccups, and applies per-model sampling profiles (overridable in config)
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
 - **17 built-in tools** — `ask_user`, `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `make_directory`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`, `run_tests`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
@@ -123,6 +125,7 @@ Inside a modal: type to filter, ↑/↓ to move, `↵` to choose, `Esc` to close
 | `-l, --log` | Write session log only (no console output beyond the final answer) |
 | `-m, --model <name>` | Override model for this run |
 | `-a, --agent <id>` | Select an agent: `build` (default), `plan`, or a custom one |
+| `--process <id>` | (`run` only) Run an advised process end-to-end, e.g. `--process guided` (plan → build, headless) |
 | `--skill <name>` | Apply a skill (repeatable) |
 | `--skill-arg <name=value>` | Provide a value for a skill placeholder (repeatable) |
 | `-s, --max-steps <n>` | Override max ReAct iterations (default: 25) |
