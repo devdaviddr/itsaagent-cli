@@ -21,12 +21,11 @@ describe("iaa tools", () => {
   });
 
   it("maps tools to the built-in agents that permit them", () => {
-    // bash is a mutation tool: build (all) yes, plan (read-only) no, cli yes
+    // bash is a mutation tool: build (all) yes, plan (read-only) no.
     expect(agentsPermitting("bash")).toContain("build");
-    expect(agentsPermitting("bash")).toContain("cli");
     expect(agentsPermitting("bash")).not.toContain("plan");
-    // read_file: build yes, plan yes, cli no (not in cli's list)
+    // read_file: build yes, plan yes.
+    expect(agentsPermitting("read_file")).toContain("build");
     expect(agentsPermitting("read_file")).toContain("plan");
-    expect(agentsPermitting("read_file")).not.toContain("cli");
   });
 });

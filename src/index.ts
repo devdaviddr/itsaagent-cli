@@ -19,13 +19,13 @@ const collect = (val: string, acc: string[]): string[] => { acc.push(val); retur
 program
   .name("iaa")
   .description("ItsAAgent — Ollama-optimised ReAct agent for the CLI")
-  .version("0.5.0")
+  .version("0.5.1")
   .option("-v, --verbose", "Show agent reasoning, tool calls, and stream output live")
   .option("-l, --log", "Write session log to disk (auto-enabled with -v)")
   .option("-m, --model <model>", "Override the model for this run")
   .option("--host <url>", "Override provider host URL")
   .option("-s, --max-steps <n>", "Override max ReAct iterations", parseInt)
-  .option("-a, --agent <id>", "Select an agent (build, plan, cli)")
+  .option("-a, --agent <id>", "Select an agent (build, plan)")
   .option("--skill <name>", "Apply a skill (repeatable)", collect, [])
   .option("--skill-arg <name=value>", "Provide a skill arg value (repeatable)", collect, []);
 

@@ -19,7 +19,7 @@ Built for developers who want an autonomous agent without a cloud subscription.
 
 - **ReAct loop** — Thought → Action → Observation, repeated until done or the step limit is reached
 - **Native tool calling** — uses Ollama's function-calling API for capable models, with a text parser as automatic fallback
-- **Built-in agents** — `build` (full access), `plan` (read-only), `cli` (shell/infra); each scopes which tools the model may call
+- **Built-in agents** — `build` (full access) and `plan` (read-only analysis); each scopes which tools the model may call. In the TUI, `plan` produces an approach you can hand off to `build` by pressing **Tab**
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
 - **13 built-in tools** — `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
@@ -105,6 +105,7 @@ Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; �
 Ctrl+U / Ctrl+D  scroll half a page
 mouse / trackpad scroll the transcript (wheel)
 Esc              jump to the latest (or cancel an in-flight run, or close a modal)
+Tab              (in plan mode) hand the approach off to the build agent
 Ctrl+C           quit (during a run: cancel, then quit on a second press)
 ```
 
@@ -118,7 +119,7 @@ Inside a modal: type to filter, ↑/↓ to move, `↵` to choose, `Esc` to close
 | `-i, --interactive` | (`run` only) Open the persistent TUI seeded with the task instead of a one-shot run |
 | `-l, --log` | Write session log only (no console output beyond the final answer) |
 | `-m, --model <name>` | Override model for this run |
-| `-a, --agent <id>` | Select an agent: `build` (default), `plan`, `cli`, or a custom one |
+| `-a, --agent <id>` | Select an agent: `build` (default), `plan`, or a custom one |
 | `--skill <name>` | Apply a skill (repeatable) |
 | `--skill-arg <name=value>` | Provide a value for a skill placeholder (repeatable) |
 | `-s, --max-steps <n>` | Override max ReAct iterations (default: 25) |

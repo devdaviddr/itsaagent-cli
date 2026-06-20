@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.5.1] — 2026-06-20
+
+### Added
+- **Plan → build handoff** — in the TUI, when the `plan` agent has produced an approach, press **Tab** to hand it off to `build`: it switches agent, seeds build with the plan, and runs it. A `Tab → hand off to build` hint shows when available. `plan` stays read-only until you hand off.
+
+### Changed
+- **Two built-in agents** — `build` and `plan`. `plan`'s prompt now asks for a concrete, executable approach.
+
+### Removed
+- The **`cli` agent**. `build` (`tools: "all"`) already had every tool `cli` did (`bash`, `ssh`, `ssh_upload`, `ssh_download`, `fetch`, `download_file`), so nothing is lost. `--agent cli` / `/agent cli` now errors `Unknown agent`.
+
 ### Fixed
 - File tools (`read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`) now expand a leading `~` to the home directory. Previously `~/Desktop/x` was written to `<cwd>/~/Desktop/x` (a literal `~` folder), so the `build` agent appeared to "fail" to write to the Desktop while the `cli` agent (using `bash`, which the shell expands) worked. Both now behave the same.
 

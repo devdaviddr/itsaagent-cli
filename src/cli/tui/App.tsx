@@ -124,18 +124,44 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, Boolean(modal), rearmTick]);
 
-  function runTurn(text: string): void {
+  function runTurn(text: string, taskOverride?: string): void {
     const cont = !firstRef.current;
     firstRef.current = false;
     cancelArmedRef.current = false;
     dispatch({ type: "user", text });
     dispatch({ type: "scrollToTail" });
     setMode("running");
-    const p = cont ? runtime.continueChat(text) : runtime.run(text);
+    const task = taskOverride ?? text;
+    const p = cont ? runtime.continueChat(task) : runtime.run(task);
     p.catch((err: unknown) => {
       dispatch({ type: "error", text: err instanceof Error ? err.message : String(err) });
       setMode("idle");
     });
+  }
+
+  /** Last answer in the transcript (the plan, when handing off). */
+  function lastAnswerText(): string {
+    for (let i = conv.entries.length - 1; i >= 0; i--) {
+      const e = conv.entries[i];
+      if (e.kind === "answer") return e.text;
+    }
+    return "";
+  }
+
+  /** Hand the plan agent's approach off to build (Tab in plan mode). */
+  function handoffToBuild(): void {
+    const plan = lastAnswerText();
+    if (!plan) {
+      dispatch({ type: "notice", text: "Ask plan for an approach first, then press Tab to hand it to build." });
+      return;
+    }
+    const buildDef = resolveAgent("build");
+    if (!buildDef) return;
+    runtime.setAgent(buildDef);
+    setAgentId("build");
+    firstRef.current = true; // fresh build context, seeded with the plan
+    dispatch({ type: "notice", text: "→ Handed off to build — implementing the plan." });
+    runTurn("Implement the plan above.", `Implement this plan and make the changes:\n\n${plan}`);
   }
 
   async function runCommand(cmd: ChatCommand): Promise<void> {
@@ -414,6 +440,11 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       if (key.esc) mainInput.setValue("");
       return;
     }
+    // Tab in plan mode hands the approach off to the build agent.
+    if (key.tab) {
+      if (agentId === "plan" && mode !== "running") handoffToBuild();
+      return;
+    }
     if (key.esc) {
       if (mode === "running") {
         cancelArmedRef.current = true;
@@ -469,6 +500,11 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         cwd={basename(process.cwd())}
         version={VERSION}
         ctxRatio={usage ? usage.ratio : null}
+        note={
+          agentId === "plan" && mode !== "running" && !modal && conv.entries.some((e) => e.kind === "answer")
+            ? "Tab → hand off to build"
+            : undefined
+        }
       />
       {modal ? (
         <Modal
