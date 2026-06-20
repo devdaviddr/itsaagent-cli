@@ -206,6 +206,36 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     return this.runLoop(startTime);
   }
 
+  /**
+   * Hand the current session off to the build agent. Build's context is seeded
+   * with the plan plus a deterministic compact summary of what the planning
+   * phase examined (files read, commands run) — NOT the raw tool-result dumps.
+   * Re-scopes tools and the system prompt to the build agent, then executes.
+   */
+  async handoffToBuild(buildAgent: AgentDefinition, planText: string): Promise<string> {
+    const startTime = Date.now();
+    const summary = this.session.examinedSummary();
+    this.session.setAgent(buildAgent);
+    const cwd = process.cwd();
+    this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills));
+    this.ctx.add({
+      role: "user",
+      content: [
+        "Implement this plan. Do exactly what it describes — create/edit the files and run the commands.",
+        "",
+        "## Plan",
+        planText,
+        "",
+        "## Planning context (already explored — don't re-do this)",
+        summary,
+      ].join("\n"),
+    });
+    await this.detectToolUse();
+    await this.logger.init("Implement the plan", this.session.model, cwd);
+    this.emit("start", { task: "Implement the plan", model: this.session.model, cwd, logPath: this.logger.filePath });
+    return this.runLoop(startTime);
+  }
+
   private async runLoop(startTime: number): Promise<string> {
     this.running = true;
     this.cancelled = false;
