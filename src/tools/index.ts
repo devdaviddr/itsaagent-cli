@@ -13,9 +13,11 @@ import {
 import { sshTool, sshUploadTool, sshDownloadTool } from "./ssh.js";
 import { gitTool } from "./git.js";
 import { fetchTool } from "./fetch.js";
+import { askUserTool } from "./ask.js";
 
 export function getDefaultTools(): Tool[] {
   return [
+    askUserTool,
     bashTool,
     sshTool,
     sshUploadTool,
@@ -48,3 +50,4 @@ export {
   grepTool,
 } from "./filesystem.js";
 export { sshTool } from "./ssh.js";
+export { askUserTool } from "./ask.js";

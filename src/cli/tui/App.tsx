@@ -85,6 +85,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   // Bumped on every submit to re-trigger the input re-arm effect even when
   // mode/modal don't change (e.g. /clear stays idle with no modal).
   const [rearmTick, setRearmTick] = useState(0);
+  // Set while the agent is awaiting an answer to ask_user; the next submission
+  // resolves it (instead of starting a new turn) and the loop continues.
+  const [pendingAsk, setPendingAsk] = useState<{ resolve: (answer: string) => void } | null>(null);
   const firstRef = useRef(true);
   const cancelArmedRef = useRef(false);
 
@@ -96,7 +99,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
 
   useEffect(() => {
     runtime.initSession();
+    // When the agent calls ask_user, show the question and pause for the answer.
+    runtime.setAskUserHandler((question) => {
+      dispatch({ type: "notice", text: `? ${question}` });
+      dispatch({ type: "scrollToTail" });
+      return new Promise<string>((resolve) => setPendingAsk({ resolve }));
+    });
     if (seedTask && seedTask.trim()) runTurn(seedTask.trim());
+    return () => runtime.setAskUserHandler(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -362,6 +372,16 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   }
 
   function handleMainSubmit(v: string): void {
+    // If the agent asked a question, this submission is the answer — feed it back
+    // to the paused loop rather than starting a new turn.
+    if (pendingAsk) {
+      pendingAsk.resolve(v);
+      setPendingAsk(null);
+      dispatch({ type: "user", text: v });
+      dispatch({ type: "scrollToTail" });
+      mainInput.setValue("");
+      return;
+    }
     // Re-trigger the re-arm effect after this submit (Enter exits insert mode).
     setRearmTick((t) => t + 1);
     const live = matchCommands(v);
@@ -454,7 +474,13 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       return;
     }
     if (key.esc) {
-      if (mode === "running") {
+      if (pendingAsk) {
+        // Cancel the pending question: unblock the loop, then cancel the run.
+        pendingAsk.resolve("(The user cancelled. Stop and summarise what remains.)");
+        setPendingAsk(null);
+        cancelArmedRef.current = true;
+        runtime.cancel();
+      } else if (mode === "running") {
         cancelArmedRef.current = true;
         runtime.cancel();
       } else {
@@ -498,7 +524,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         onSubmit={handleMainSubmit}
         onUpArrow={onMainUp}
         onDownArrow={onMainDown}
-        running={mode === "running"}
+        running={mode === "running" && !pendingAsk}
         providerOk={providerOk}
       />
       <StatusLine
