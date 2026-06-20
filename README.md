@@ -103,7 +103,7 @@ Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; �
 ↵                send the message in the input box
 ↑ / ↓            scroll the transcript one line
 Ctrl+U / Ctrl+D  scroll half a page
-mouse / trackpad scroll the transcript (wheel)
+mouse / trackpad scroll the transcript (opt-in: set `mouse: true` in config)
 Esc              jump to the latest (or cancel an in-flight run, or close a modal)
 Tab              (in plan mode) hand the approach off to the build agent
 Ctrl+C           quit (during a run: cancel, then quit on a second press)

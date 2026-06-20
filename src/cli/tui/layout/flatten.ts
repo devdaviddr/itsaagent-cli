@@ -5,7 +5,7 @@
  */
 import type { Entry } from "../state/conversation.js";
 import type { Theme } from "../theme.js";
-import { resultLines, clampLines, moreMarker, collapsedSummary } from "../components/toolFormat.js";
+import { resultLines, clampLines, moreMarker } from "../components/toolFormat.js";
 
 export interface Line {
   text: string;
@@ -83,20 +83,20 @@ function entryLines(entry: Entry, width: number, theme: Theme): Line[] {
     case "tool": {
       const icon = entry.status === "running" ? "…" : entry.status === "success" ? "✓" : "✗";
       const argStr = JSON.stringify(entry.args ?? {}).replace(/\s+/g, " ");
-      const head = `▸ ${entry.name} ${argStr} ${icon}`;
-      push(head.length > width ? head.slice(0, width - 1) + "…" : head, theme.toolName);
+      // Keep args short so the status icon at the end is never clipped; the box
+      // (truncate-end) trims any remaining overflow.
+      const shortArgs = argStr.length > 44 ? argStr.slice(0, 43) + "…" : argStr;
+      push(`▸ ${entry.name} ${shortArgs} ${icon}`, theme.toolName);
       const body = resultLines(entry.result);
       if (entry.expanded) {
         const { shown, hidden } = clampLines(body, MAX_TOOL_LINES);
-        shown.forEach((l) => wrapText("  " + l, width).forEach((w) => push(w, theme.muted)));
-        if (hidden > 0) push("  " + moreMarker(hidden), theme.muted);
-      } else {
-        const summary = collapsedSummary(entry.result);
-        if (summary) {
-          const extra = Math.max(0, body.length - 1);
-          const line = "  " + summary + (extra > 0 ? `   (+${extra} more)` : "");
-          push(line.length > width ? line.slice(0, width - 1) + "…" : line, theme.muted);
-        }
+        shown.forEach((l) => wrapText("    " + l, width).forEach((w) => push(w, theme.muted)));
+        if (hidden > 0) push("    " + moreMarker(hidden), theme.muted);
+      } else if (body.length > 0) {
+        const first = (body.find((l) => l.trim().length > 0) ?? "").trim();
+        const suffix = body.length > 1 ? `  (+${body.length - 1} more)` : "";
+        // Push one full line; the message box truncates the right edge cleanly.
+        push(`    ${first}${suffix}`, theme.muted);
       }
       break;
     }

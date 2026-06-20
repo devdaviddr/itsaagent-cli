@@ -24,6 +24,12 @@ export interface CliConfig {
    * and `bold`. Example: { "theme": "custom", "customTheme": { "accent": "#ff8800", "background": "#101010", "bold": false } }
    */
   customTheme?: import("./tui/theme.js").ThemeOverrides;
+  /**
+   * Enable mouse/trackpad wheel scrolling in the TUI. Off by default because
+   * capturing the mouse disables native terminal text selection/copy. Keyboard
+   * scroll (↑/↓, Ctrl+U/D) works regardless.
+   */
+  mouse?: boolean;
 }
 
 export function defaultConfig(): CliConfig {
