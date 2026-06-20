@@ -9,7 +9,7 @@ import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
 import { parseResponse, stableKey, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
-import { agentPermitsTool, type AgentDefinition } from "./AgentDefinition.js";
+import { agentPermitsTool, MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
 export interface AgentRuntimeEvents {
   start: [payload: { task: string; model: string; cwd: string; logPath: string }];
@@ -141,11 +141,11 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
   private async executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     if (!this.isToolPermitted(name)) {
-      return {
-        success: false,
-        data: "",
-        error: "Tool not permitted by active agent",
-      };
+      const readonlyMutation = this.agent?.readonly === true && MUTATION_TOOLS.has(name);
+      const error = readonlyMutation
+        ? `Tool not permitted by active agent: ${name} changes the system and this is a read-only (plan) agent. Do NOT retry. Finish now by outputting your full plan as <answer> — describe this step in words; the user will hand it to the build agent to execute.`
+        : "Tool not permitted by active agent";
+      return { success: false, data: "", error };
     }
     const tool = this.tools.get(name);
     if (!tool) {

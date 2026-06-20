@@ -75,7 +75,7 @@ describe("Agent tool permissions", () => {
     const errors: (string | undefined)[] = [];
     runtime.on("tool:result", ({ result }) => errors.push(result.error));
     await runtime.run("run a command");
-    expect(errors).toContain("Tool not permitted by active agent");
+    expect(errors.some((e) => e?.includes("Tool not permitted by active agent"))).toBe(true);
   });
 
   it("plan agent blocks write_file with the permission error", async () => {
@@ -85,7 +85,7 @@ describe("Agent tool permissions", () => {
     const errors: (string | undefined)[] = [];
     runtime.on("tool:result", ({ result }) => errors.push(result.error));
     await runtime.run("write a file");
-    expect(errors).toContain("Tool not permitted by active agent");
+    expect(errors.some((e) => e?.includes("Tool not permitted by active agent"))).toBe(true);
   });
 });
 
@@ -134,6 +134,6 @@ describe("Runtime agent/model switching (M-03)", () => {
     const errors: (string | undefined)[] = [];
     runtime.on("tool:result", ({ result }) => errors.push(result.error));
     await runtime.run("try bash");
-    expect(errors).toContain("Tool not permitted by active agent");
+    expect(errors.some((e) => e?.includes("Tool not permitted by active agent"))).toBe(true);
   });
 });
