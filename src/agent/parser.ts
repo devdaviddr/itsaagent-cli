@@ -19,13 +19,12 @@ export function parseResponse(raw: string): ParsedResponse {
   const thoughtMatch = raw.match(/<thought>([\s\S]*?)<\/thought>/i);
   if (thoughtMatch) result.thought = thoughtMatch[1].trim();
 
-  // Explicit <answer> tag — definitive termination
-  const answerMatch = raw.match(/<answer>([\s\S]*?)<\/answer>/i);
-  if (answerMatch) {
-    result.answer = answerMatch[1].trim();
-    result.isExplicitAnswer = true;
-    return result;
-  }
+  // IMPORTANT: tool calls are checked BEFORE <answer>. Small models often emit a
+  // tool call AND an <answer> in the same response (e.g. a write_file call
+  // immediately followed by "File created successfully") — but at that point the
+  // tool hasn't run yet, so the answer is a fabrication. We must execute the tool
+  // and ignore the premature answer; the model gives its real answer next turn,
+  // after seeing the [TOOL RESULT].
 
   // Primary: <tool_call> XML block
   const toolCallMatch = raw.match(/<tool_call>([\s\S]*?)<\/tool_call>/i);
@@ -86,7 +85,15 @@ export function parseResponse(raw: string): ParsedResponse {
     }
   }
 
-  // No structure — treat whole response as final answer
+  // No tool call found — now honour an explicit <answer> as the final answer.
+  const answerMatch = raw.match(/<answer>([\s\S]*?)<\/answer>/i);
+  if (answerMatch) {
+    result.answer = answerMatch[1].trim();
+    result.isExplicitAnswer = true;
+    return result;
+  }
+
+  // No structure — treat whole response as final answer.
   result.answer = raw.trim();
   return result;
 }
