@@ -102,6 +102,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   useEffect(() => setPaletteIndex(0), [value]);
 
   // Keep the tuir Modal visibility in sync, and re-arm the main input on close.
+  // Depend ONLY on `modal` — showModal/hideModal/mainInput get fresh identities
+  // every render, so including them would re-run this effect each render and
+  // loop ("Maximum update depth exceeded").
   useEffect(() => {
     if (modal) {
       showModal();
@@ -113,7 +116,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     // on the next tick so typing works again.
     const t = setTimeout(() => mainInput.enterInsert(), 0);
     return () => clearTimeout(t);
-  }, [modal, showModal, hideModal, mainInput]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(modal)]);
 
   function runTurn(text: string): void {
     const cont = !firstRef.current;
@@ -394,7 +398,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
 
   return (
     <Box flexDirection="column" height={appHeight} width={width} paddingX={1} backgroundColor={theme.background}>
-      <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
+      <Box flexGrow={1} flexDirection="column" overflow="hidden" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
         {isEmpty ? (
           <Banner theme={theme} />
         ) : (
@@ -402,6 +406,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
             visible={visible}
             theme={theme}
             width={contentWidth}
+            rows={logRows}
             live={mode === "running" && conv.following ? conv.live : ""}
             focusedToolId={selected}
           />
