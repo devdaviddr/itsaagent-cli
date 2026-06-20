@@ -84,6 +84,8 @@ cwd are pointed at it. Nothing ever touches your real home directory.
 | `handoff-express` | Plan an Express API, then hand off to `build`, which **actually builds it** (runtime path). |
 | `guided-tui-handoff` | Plan → build through the **TUI's capture path** (conversation reducer + `lastAnswer`), exactly what pressing **Tab** does. |
 | `ask-user` | An ambiguous request makes the agent call `ask_user`; the supplied answer drives the result. |
+| `build-full-api` | The `build` agent codes a **complete** Express API (package.json + server + `/hello` route) in **one run** — no staggered stops. |
+| `build-complete-script` | Same completeness on a **non-web** task (a Node CLI with edge-case handling) — proves the behaviour is general, not API-specific. |
 | `fetch-url` | Fetches a URL with the `fetch` tool (**gated** on outbound network). |
 | `ssh-roundtrip` | Runs a command over SSH (**gated** on `IAA_E2E_SSH_HOST`, optionally `IAA_E2E_SSH_USER`). |
 
