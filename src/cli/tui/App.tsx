@@ -1,13 +1,4 @@
-import {
-  Viewport,
-  Box,
-  Modal,
-  useApp,
-  useInput,
-  useModal,
-  useTextInput,
-  useViewportDimensions,
-} from "tuir";
+import { Box, Modal, useApp, useInput, useModal, useStdout, useTextInput } from "tuir";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { basename } from "node:path";
 import type { AgentRuntime } from "../../agent/AgentRuntime.js";
@@ -54,18 +45,28 @@ export interface AppProps {
   themeName?: string;
 }
 
-/** Root: fullscreen Viewport wrapping the app (so useViewportDimensions works). */
-export function App(props: AppProps) {
-  return (
-    <Viewport flexDirection="column">
-      <AppInner {...props} />
-    </Viewport>
-  );
+/**
+ * Track terminal size. We deliberately avoid tuir's <Viewport> (which forces a
+ * full-height Box and triggers tuir's clear-the-whole-screen-every-frame flicker
+ * path); a plain root Box sized one row short keeps output under the terminal
+ * height so tuir uses its incremental-diff renderer.
+ */
+function useTermSize(): { rows: number; cols: number } {
+  const { stdout } = useStdout();
+  const [dims, setDims] = useState({ rows: stdout.rows || 24, cols: stdout.columns || 80 });
+  useEffect(() => {
+    const onResize = (): void => setDims({ rows: stdout.rows || 24, cols: stdout.columns || 80 });
+    stdout.on("resize", onResize);
+    return () => {
+      stdout.off("resize", onResize);
+    };
+  }, [stdout]);
+  return dims;
 }
 
-function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
+export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
   const { exit } = useApp();
-  const { width, height } = useViewportDimensions();
+  const { rows: height, cols: width } = useTermSize();
 
   const mainInput = useTextInput("");
   const searchInput = useTextInput("");
@@ -390,7 +391,7 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
   const isEmpty = conv.entries.length === 0 && mode !== "running";
 
   return (
-    <Box flexDirection="column" height={appHeight} paddingX={1}>
+    <Box flexDirection="column" height={appHeight} width={width} paddingX={1}>
       <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
         {isEmpty ? (
           <Banner theme={theme} />
