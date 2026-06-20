@@ -42,7 +42,7 @@ export function registerChatCommand(program: Command): void {
 
       // The persistent TUI needs a real terminal; fall back to the plain REPL when piped.
       if (isInteractiveTTY()) {
-        await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme });
+        await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme, mouse: conf.mouse });
         return;
       }
 

@@ -17,6 +17,8 @@ export interface LaunchTuiOptions {
   providerOk?: boolean;
   themeName?: string;
   customTheme?: ThemeOverrides;
+  /** Enable mouse/trackpad wheel scroll (disables native text selection). */
+  mouse?: boolean;
 }
 
 export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
@@ -34,9 +36,9 @@ export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
 
   // preserveScreen() saves/restores the terminal (alternate-screen equivalent).
   preserveScreen();
-  // Enable mouse/trackpad wheel scroll (note: this captures mouse events, so
-  // native terminal text-selection is disabled while the TUI is open).
-  setMouseReporting(true);
+  // Mouse/trackpad wheel scroll is opt-in (config `mouse: true`) — enabling it
+  // captures mouse events, which disables native terminal text-selection/copy.
+  if (opts.mouse) setMouseReporting(true);
   const { waitUntilExit } = render(
     createElement(App, {
       runtime: opts.runtime,
@@ -59,5 +61,5 @@ export async function launchHomeTui(): Promise<void> {
   const agentConfig = await toAgentConfig(conf, {});
   const runtime = new Runtime(agentConfig);
   const { ok } = await runtime.checkProvider();
-  await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme });
+  await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme, mouse: conf.mouse });
 }

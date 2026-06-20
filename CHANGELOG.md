@@ -7,12 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Mouse/trackpad wheel scroll in the TUI is now **opt-in** (`mouse: true` in `~/.config/ai-cli/config.json`). It was capturing mouse events, which disabled native terminal text-selection/copy. Keyboard scroll (↑/↓, Ctrl+U/D) works regardless; with `mouse: true`, hold Option (macOS) to select.
+
 ### Fixed
 - Build agent reliability — "File created successfully" with no file actually created. Three root causes:
   - **Parser priority:** small models often emit a tool call *and* an `<answer>` in one response (the answer fabricated before the tool ran). The parser checked `<answer>` first and threw the tool call away. Tool calls are now parsed **before** `<answer>`, so the tool runs and the model answers next turn.
   - **Prompt:** added rules that any real action MUST be a `<tool_call>` and that the model must never claim success without an actual `[TOOL RESULT]`; create files via `write_file(path, content)`.
   - **Paths:** the system prompt now states the real home directory (and that `~` is expanded), so the model stops inventing placeholder paths like `/Users/your_username/Desktop`.
   - Result: `qwen2.5-coder:7b` went from 0/3 → 2/3 on a multi-turn "create a file" test; the optimised `qwen2.5-coder-7b-32k:latest` is 3/3.
+- TUI tool-call rendering: the collapsed result line could garble (e.g. `(+2 morennect to host…`) and the status icon could be clipped. Tool lines now push cleanly and the message box trims overflow; the icon is always visible.
 
 ---
 
