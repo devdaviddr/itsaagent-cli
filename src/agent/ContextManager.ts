@@ -52,6 +52,17 @@ export class ContextManager {
     this.evictedTotal = 0;
   }
 
+  /** Replace the system prompt in place, preserving all conversation history.
+   * Used to rebuild the prompt once the model's native-tool capability is known. */
+  setSystemPrompt(content: string): void {
+    const first = this.messages[0];
+    if (first && first.role === "system") {
+      this.messages[0] = { role: "system", content, timestamp: first.timestamp };
+    } else {
+      this.messages.unshift({ role: "system", content, timestamp: Date.now() });
+    }
+  }
+
   usage(): { total: number; max: number; ratio: number } {
     const total = this.totalTokens();
     return { total, max: this.maxTokens, ratio: Math.round((total / this.maxTokens) * 100) };

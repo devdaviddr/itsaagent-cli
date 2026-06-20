@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
 
+### Changed (Phase 4: per-model prompt)
+- **The system prompt now adapts to the model's tool-calling mode.** When the model supports native function-calling, the prompt drops the text `<tool_call>` XML schema and tells it to call tools directly — previously it taught the XML format even in native mode, a contradictory "emit native *and* XML" instruction that made small models waste turns. Final answers still use `<answer>` in both modes. The prompt is rebuilt once native capability is detected (history preserved).
+
 ### Added (Phase 3: enforce completion / self-correction)
 - **`run_tests` tool** — runs the project's test suite (auto-detects `npm`/`pnpm`/`yarn test`, `pytest`, `cargo test`, or `make test`) in the session cwd and reports a normalized PASS/FAIL. The verification primitive the agent uses to check its own work.
 - **Verification gate** — before accepting the *first* `<answer>` on a build run that actually mutated something, the loop injects one `[VERIFY]` turn making the model confirm the deliverables exist/work with a tool. Fires at most once per run; read-only/plan answers and non-mutating runs pass straight through.

@@ -69,3 +69,19 @@ describe("few-shot exemplar in the system prompt (F-1.4)", () => {
     expect(numbered.length).toBeLessThanOrEqual(8);
   });
 });
+
+describe("native-tool-mode prompt branching (F-4.1)", () => {
+  it("teaches the XML <tool_call> format by default (text mode)", () => {
+    const prompt = buildSystemPrompt(tools, "/tmp");
+    expect(prompt).toContain("<tool_call>");
+    expect(prompt).toMatch(/wrapped in <tool_call> tags/);
+  });
+
+  it("drops the XML format and teaches direct calls when nativeTools is true", () => {
+    const prompt = buildSystemPrompt(tools, "/tmp", undefined, undefined, { nativeTools: true });
+    expect(prompt).not.toContain("<tool_call>"); // no contradictory XML instruction
+    expect(prompt).toMatch(/function-calling|call a provided tool directly/i);
+    expect(prompt).toContain("<answer>"); // final-answer format is still XML in both modes
+    expect(prompt).toMatch(/MUST call a tool/); // rule 2 callVerb branched
+  });
+});
