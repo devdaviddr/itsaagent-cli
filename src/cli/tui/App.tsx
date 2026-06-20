@@ -82,6 +82,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const [themeName, setThemeName] = useState(initialThemeName);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [modal, setModal] = useState<ModalState | null>(null);
+  // Bumped on every submit to re-trigger the input re-arm effect even when
+  // mode/modal don't change (e.g. /clear stays idle with no modal).
+  const [rearmTick, setRearmTick] = useState(0);
   const firstRef = useRef(true);
   const cancelArmedRef = useRef(false);
 
@@ -119,7 +122,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, Boolean(modal)]);
+  }, [mode, Boolean(modal), rearmTick]);
 
   function runTurn(text: string): void {
     const cont = !firstRef.current;
@@ -325,6 +328,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   }
 
   function handleMainSubmit(v: string): void {
+    // Re-trigger the re-arm effect after this submit (Enter exits insert mode).
+    setRearmTick((t) => t + 1);
     const live = matchCommands(v);
     if (live.length > 0) {
       selectCommand(live[clampIndex(paletteIndex, live.length)]);
