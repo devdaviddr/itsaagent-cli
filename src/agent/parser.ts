@@ -102,3 +102,27 @@ export function parseResponse(raw: string): ParsedResponse {
 export function stableKey(name: string, args: Record<string, unknown>): string {
   return `${name}:${JSON.stringify(args, Object.keys(args).sort())}`;
 }
+
+/**
+ * Heuristic: does this "answer" actually read like a mid-task status update
+ * ("Next I will edit the config…") rather than a finished result? Small models
+ * routinely wrap a progress narration in <answer> and quit. Conservative on
+ * purpose — only high-confidence continuation phrasing — so genuine final
+ * answers are not re-prompted. Used to nudge the agent to keep going (once).
+ */
+const MID_TASK_PATTERNS: RegExp[] = [
+  /\bnext,?\s+I(?:'ll| will| am going to| need to)\b/i,
+  /\bnow\s+I(?:'ll| will| am going to| need to)\b/i,
+  /\bI(?:'ll| will)\s+(?:now\s+|next\s+)?(?:start|begin|create|write|add|implement|proceed|continue|set up|install)\b/i,
+  /\blet me\s+(?:now\s+)?(?:start|begin|create|write|add|implement|proceed|install|set up)\b/i,
+  /\bI(?:'m| am)\s+going to\b/i,
+  /\bproceeding to\b/i,
+  /\bnext step\b/i,
+  /\bthe next step is\b/i,
+];
+
+export function looksLikeMidTaskAnswer(text: string): boolean {
+  const t = (text ?? "").trim();
+  if (t.length === 0) return false;
+  return MID_TASK_PATTERNS.some((re) => re.test(t));
+}

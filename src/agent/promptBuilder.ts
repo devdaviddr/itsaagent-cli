@@ -19,7 +19,33 @@ export function buildToolDescriptions(tools: Tool[]): string {
     .join("\n\n");
 }
 
-export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string, skills?: Skill[]): string {
+export interface PromptOptions {
+  /** Include one worked few-shot trajectory (default true). Small models follow the protocol far better with an example. */
+  fewShot?: boolean;
+}
+
+/** One short worked trajectory: Thought → tool_call → [TOOL RESULT] → wait → answer.
+ * Teaches the protocol (and that you answer only AFTER the result confirms success). */
+const FEW_SHOT_EXAMPLE = [
+  "## Example (follow this shape)",
+  "<thought>",
+  "I need to create the file, so I will call write_file.",
+  "</thought>",
+  "<tool_call>",
+  '{"name": "write_file", "args": {"path": "notes/todo.txt", "content": "buy milk"}}',
+  "</tool_call>",
+  "[TOOL RESULT: write_file — OK] {\"path\":\"notes/todo.txt\"}",
+  "Wrote 8 bytes to notes/todo.txt",
+  "<thought>",
+  "The result confirms the file was written, so the task is done.",
+  "</thought>",
+  "<answer>",
+  "Created notes/todo.txt containing \"buy milk\".",
+  "</answer>",
+].join("\n");
+
+export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string, skills?: Skill[], opts: PromptOptions = {}): string {
+  const fewShot = opts.fewShot !== false;
   const base = [
     `You are an AI agent that completes tasks by running tools step by step.`,
     `Follow the ReAct pattern: Thought → Action → Observation → Thought → …`,
@@ -46,6 +72,7 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `Your final answer here.`,
     `</answer>`,
     ``,
+    ...(fewShot ? [FEW_SHOT_EXAMPLE, ``] : []),
     `## Rules`,
     `1. ONE tool call per response, wrapped in <tool_call> tags, with JSON using exactly "name" and "args" keys.`,
     `2. CRITICAL — to do anything real (create/write/edit/delete a file, run a command, transfer files) you MUST emit a <tool_call>. NEVER claim an action happened ("File created", "Done", "I've written it") unless a tool actually returned a successful [TOOL RESULT]. Do not fabricate results. To create or overwrite a file, call write_file with "path" and "content" (empty string for an empty file) — never read_file a path you mean to create.`,

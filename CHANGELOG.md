@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+> Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
+
+### Added (Phase 0–1: correctness + deterministic reliability wins)
+- **Few-shot exemplar in the system prompt** — one worked Thought→tool_call→[TOOL RESULT]→answer trajectory that also models "answer only after the result confirms success". On by default; toggle with `"fewShot": false` in config to A/B it.
+
+### Fixed (Phase 0–1)
+- **Context window is now actually requested from Ollama (`num_ctx`).** `maxContextTokens` was trimmed client-side but never sent to the server, so Ollama silently ran at its small default window and truncated the very context the harness preserved — a root cause of forgetting/premature-stopping on multi-step tasks. It is now threaded into `ProviderConfig` and sent as `options.num_ctx`.
+- **`git` now uses the session working directory.** It ran in `process.cwd()`, so after the model `cd`'d via `bash`, `git status/add/commit` silently targeted the wrong repo. It now honours the shared session cwd like the other tools.
+- **Tool results lead with an explicit `— OK`/`— FAILED` token** (and a "do not claim success" line on failure). Small models missed the old conditional trailing `Error:` and hallucinated success.
+- **Status-shaped answers are re-prompted once** instead of accepted. When a build run emits an `<answer>` that reads like a progress update ("Next I'll edit…"), the loop nudges it to finish the task (capped to once per run; plan answers unaffected).
+
 ### Added
 - **`make_directory` tool** — creates a folder (and any missing parents). Fixes a class of failures where, asked to "create a folder", the agent misused `write_file` and produced a **0-byte file** with the folder's name (so later writes into it failed with a confusing `EEXIST mkdir`). The prompt and tool descriptions now steer folder creation to `make_directory`, and `write_file` documents that it makes parent folders itself.
 

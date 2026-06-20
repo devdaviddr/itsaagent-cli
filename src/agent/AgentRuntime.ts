@@ -8,7 +8,7 @@ import { Session } from "./Session.js";
 import { LoopDetectedError, MaxStepsError, toErrorMessage } from "./errors.js";
 import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
-import { parseResponse, stableKey, type ParsedResponse } from "./parser.js";
+import { parseResponse, stableKey, looksLikeMidTaskAnswer, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
 import { agentPermitsTool, MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
@@ -27,13 +27,19 @@ export interface AgentRuntimeEvents {
   ask: [payload: { question: string }];
 }
 
-function formatToolResult(tool: string, args: Record<string, unknown>, result: ToolResult): string {
-  let out = `[TOOL RESULT: ${tool} ${JSON.stringify(args)}]\n`;
+/** Format a tool result for the model, leading with an explicit OK/FAILED token
+ * (small models miss a conditional trailing "Error:" line and hallucinate success). */
+export function formatToolResult(tool: string, args: Record<string, unknown>, result: ToolResult): string {
+  const status = result.success ? "OK" : "FAILED";
+  let out = `[TOOL RESULT: ${tool} — ${status}] ${JSON.stringify(args)}\n`;
   if (result.exitCode !== undefined) out += `Exit: ${result.exitCode}\n`;
   if (result.data) {
     out += result.data.length > 6000 ? result.data.slice(0, 6000) + "\n…[truncated]" : result.data;
   }
   if (result.error) out += (result.data ? "\n---\n" : "") + `Error: ${result.error.slice(0, 1500)}`;
+  if (!result.success) {
+    out += `\n[This action did NOT succeed. Read the error, then fix the cause or try a different approach — do not claim it worked.]`;
+  }
   return out;
 }
 
@@ -50,6 +56,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private running = false;
   /** Set by cancel() to stop the loop cooperatively at the next checkpoint. */
   private cancelled = false;
+  /** Whether the "that's a status, not a finished task" nudge has fired this run (cap: once). */
+  private answerNudged = false;
   /** Interactive handler for the ask_user tool (provided by the TUI). */
   private askUserHandler?: (question: string) => Promise<string>;
 
@@ -199,7 +207,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   initSession(): void {
     const cwd = process.cwd();
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }) });
   }
 
   /**
@@ -220,7 +228,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const startTime = Date.now();
 
     this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills) });
+    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }) });
     this.ctx.add({ role: "user", content: task });
 
     await this.detectToolUse();
@@ -240,7 +248,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const summary = this.session.examinedSummary();
     this.session.setAgent(buildAgent);
     const cwd = process.cwd();
-    this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills));
+    this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }));
     this.ctx.add({
       role: "user",
       content: [
@@ -262,6 +270,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private async runLoop(startTime: number): Promise<string> {
     this.running = true;
     this.cancelled = false;
+    this.answerNudged = false;
     try {
       return await this.runLoopInner(startTime);
     } finally {
@@ -309,6 +318,24 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       this.ctx.add({ role: "assistant", content: raw });
 
       if (parsed.answer !== undefined && parsed.isExplicitAnswer) {
+        // Small models sometimes wrap a progress narration ("Next I'll edit…") in
+        // <answer> and quit. On a build (non-readonly) run, nudge once to keep going
+        // instead of accepting a status-shaped answer as final.
+        if (
+          !this.answerNudged &&
+          step < this.config.maxSteps &&
+          this.agent !== undefined &&
+          !this.agent.readonly &&
+          looksLikeMidTaskAnswer(parsed.answer)
+        ) {
+          this.answerNudged = true;
+          this.ctx.add({
+            role: "user",
+            content:
+              "That reads like a status update, not a finished task. Continue — actually perform the remaining steps with tools, verify the result, then give your final <answer> only once everything is done.",
+          });
+          continue;
+        }
         const durationMs = Date.now() - startTime;
         await this.logger.logAnswer(parsed.answer);
         this.emit("answer", { text: parsed.answer, steps: step, durationMs });

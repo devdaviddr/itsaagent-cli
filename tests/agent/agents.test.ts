@@ -47,6 +47,12 @@ describe("AgentRegistry", () => {
     expect((await toAgentConfig(defaultConfig(), { agent: "plan" })).agent?.id).toBe("plan");
   });
 
+  it("passes the context window to the provider as numCtx (Phase 0 num_ctx fix)", async () => {
+    const conf = await toAgentConfig(defaultConfig(), {});
+    expect(conf.provider.numCtx).toBe(conf.maxContextTokens);
+    expect(conf.provider.numCtx).toBe(24576);
+  });
+
   it("the removed cli agent no longer resolves", async () => {
     await expect(toAgentConfig(defaultConfig(), { agent: "cli" })).rejects.toThrow(/Unknown agent/);
   });

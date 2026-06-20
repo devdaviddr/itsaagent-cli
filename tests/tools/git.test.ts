@@ -33,6 +33,20 @@ describe("gitTool", () => {
     expect(result.data.length).toBeGreaterThan(0);
   });
 
+  it("uses the session cwd when no cwd arg is given (Phase 1 fix)", async () => {
+    const { setSessionCwd, resetSessionCwd } = await import("../../src/tools/session.js");
+    await writeFile(join(REPO, "s.txt"), "hi", "utf-8");
+    setSessionCwd(REPO);
+    try {
+      // No cwd arg — must operate on REPO (the session cwd), not process.cwd().
+      const status = await gitTool.execute({ subcommand: "status", args: "--short" });
+      expect(status.success).toBe(true);
+      expect(status.data).toContain("s.txt");
+    } finally {
+      resetSessionCwd();
+    }
+  });
+
   it("git add stages a file", async () => {
     await writeFile(join(REPO, "f.txt"), "hi", "utf-8");
     const add = await gitTool.execute({ subcommand: "add", args: "f.txt", cwd: REPO });

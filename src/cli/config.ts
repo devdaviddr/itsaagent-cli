@@ -30,6 +30,11 @@ export interface CliConfig {
    * scroll (↑/↓, Ctrl+U/D) works regardless.
    */
   mouse?: boolean;
+  /**
+   * Include a worked few-shot exemplar in the system prompt (default true).
+   * Set false to A/B test prompt size vs. reliability with the e2e harness.
+   */
+  fewShot?: boolean;
 }
 
 export function defaultConfig(): CliConfig {
@@ -77,6 +82,9 @@ export async function toAgentConfig(
     model: opts.model ?? agent.model ?? conf.model,
     temperature: 0.15,
     maxTokens: 8192,
+    // Ask the model server for the full context window we manage client-side, so
+    // it doesn't silently truncate to its small default (Ollama num_ctx).
+    numCtx: conf.maxContextTokens,
   };
 
   return {
@@ -86,5 +94,6 @@ export async function toAgentConfig(
     maxContextTokens: conf.maxContextTokens,
     logDir: opts.log || opts.verbose ? conf.logDir : undefined,
     agent,
+    fewShot: conf.fewShot,
   };
 }
