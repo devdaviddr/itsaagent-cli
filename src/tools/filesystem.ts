@@ -14,6 +14,23 @@ const execFileAsync = promisify(execFile);
 // Re-exported for callers/tests; expansion now lives in the shared session module.
 export { expandHome } from "./session.js";
 
+/**
+ * Small models sometimes double-escape newlines, emitting a whole multi-line file
+ * as ONE line with literal `\n` (backslash-n) text instead of real line breaks.
+ * If a string has NO real newlines but contains 2+ literal `\n` sequences, that's
+ * almost certainly the mistake — restore real newlines/tabs. Guarded so genuine
+ * single-line content (which rarely has 2+ literal `\n`) is left untouched.
+ */
+export function restoreCollapsedNewlines(content: string): string {
+  if (content.includes("\n")) return content; // already multi-line — trust it
+  if ((content.match(/\\n/g) ?? []).length < 2) return content; // not enough signal
+  return content
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\r/g, "\r");
+}
+
 /** Files larger than this must be read with a line range, not whole. */
 const READ_FILE_MAX_BYTES = 150 * 1024;
 
@@ -138,7 +155,7 @@ export const writeFileTool: Tool = {
   definition: {
     name: "write_file",
     description:
-      "Write content to a file, replacing it if it exists. Parent directories are created automatically, so you do NOT need to make the folder first — just write the file at its full path. (To create an empty folder, use make_directory.)",
+      "Write content to a file, replacing it if it exists. Parent directories are created automatically, so you do NOT need to make the folder first — just write the file at its full path. (To create an empty folder, use make_directory.) Put real line breaks in content, not the literal two characters backslash-n.",
     parameters: {
       type: "object",
       properties: {
@@ -150,7 +167,7 @@ export const writeFileTool: Tool = {
   },
   async execute(args): Promise<ToolResult> {
     const path = resolveSessionPath(String(args.path ?? ""));
-    const content = String(args.content ?? "");
+    const content = restoreCollapsedNewlines(String(args.content ?? ""));
     const dir = dirname(path);
     try {
       await mkdir(dir, { recursive: true });
@@ -190,7 +207,7 @@ export const appendFileTool: Tool = {
   },
   async execute(args): Promise<ToolResult> {
     const path = resolveSessionPath(String(args.path ?? ""));
-    const content = String(args.content ?? "");
+    const content = restoreCollapsedNewlines(String(args.content ?? ""));
     try {
       await mkdir(dirname(path), { recursive: true });
       await appendFile(path, content, "utf-8");
@@ -235,7 +252,7 @@ export const editFileTool: Tool = {
     // --- Preferred: exact string replacement (no line counting) ---
     if (hasOldString) {
       const oldString = String(args.old_string);
-      const newString = String(args.new_string ?? "");
+      const newString = restoreCollapsedNewlines(String(args.new_string ?? ""));
       if (oldString === "") {
         return { success: false, data: "", error: "old_string must not be empty. To insert text, use line mode (end_line = start_line-1)." };
       }
@@ -281,7 +298,7 @@ export const editFileTool: Tool = {
     // --- Line mode: replace/insert/delete a line range ---
     const start = Number(args.start_line);
     const end = Number(args.end_line);
-    const newContent = String(args.new_content ?? "");
+    const newContent = restoreCollapsedNewlines(String(args.new_content ?? ""));
     try {
       const lines = original.split("\n");
       const total = lines.length;
