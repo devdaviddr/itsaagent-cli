@@ -85,6 +85,31 @@ describe("App command palette → modal", () => {
     unmount();
   });
 
+  it("/help and /tools open read-only info modals", async () => {
+    const { lastFrame, stdin, unmount } = render(createElement(App, makeProps()));
+    await tick();
+    stdin.write("/help");
+    await tick();
+    stdin.write(ENTER);
+    await tick(60);
+    const helpFrame = lastFrame() ?? "";
+    expect(helpFrame).toContain("Help");
+    expect(helpFrame).toContain("Slash commands");
+    // Info modal closes on Enter (no selection to make).
+    stdin.write(ENTER);
+    await tick(60);
+    expect(lastFrame() ?? "").not.toContain("Slash commands");
+
+    stdin.write("/tools");
+    await tick();
+    stdin.write(ENTER);
+    await tick(60);
+    const toolsFrame = lastFrame() ?? "";
+    expect(toolsFrame).toContain("Tools");
+    expect(toolsFrame).toContain("bash");
+    unmount();
+  });
+
   it("/theme opens the Select theme modal, and Esc closes it", async () => {
     const { lastFrame, stdin, unmount } = render(createElement(App, makeProps()));
     await tick();

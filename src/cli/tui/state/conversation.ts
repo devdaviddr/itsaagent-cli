@@ -83,6 +83,7 @@ export type ConvAction =
   | { type: "answer"; text: string }
   | { type: "error"; text: string }
   | { type: "notice"; text: string }
+  | { type: "reset" }
   | { type: "toggleExpand"; id: number }
   | { type: "toggleExpandAll"; expanded: boolean }
   | { type: "scrollUp"; lines: number }
@@ -158,6 +159,10 @@ export function conversationReducer(
 
     case "notice":
       return append(state, { kind: "notice", text: action.text });
+
+    case "reset":
+      // Wipe the visible transcript entirely (used by /clear).
+      return initialConversation();
 
     case "toggleExpand":
       return {

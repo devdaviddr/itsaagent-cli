@@ -14,6 +14,9 @@ interface CommandPaletteProps {
 export function CommandPalette({ matches, theme, width, index }: CommandPaletteProps) {
   if (matches.length === 0) return null;
   const labelWidth = 16;
+  // The panel has a left border (1 col) + paddingLeft (1 col); keep the
+  // highlight bar inside that so it doesn't wrap a fragment onto the next line.
+  const barWidth = Math.max(10, width - 2);
   return (
     <Box
       flexDirection="column"
@@ -27,9 +30,9 @@ export function CommandPalette({ matches, theme, width, index }: CommandPaletteP
       {matches.map((c, i) => {
         const label = `/${c.name}${c.arg ? ` ${c.arg}` : ""}`;
         if (i === index) {
-          // Selected row: a solid bar spanning the panel width.
+          // Selected row: a solid bar spanning the panel's inner width.
           const line = `${label.padEnd(labelWidth)}${c.help}`;
-          const padded = line.length >= width ? line.slice(0, width) : line.padEnd(width);
+          const padded = line.length >= barWidth ? line.slice(0, barWidth) : line.padEnd(barWidth);
           return (
             <Text key={c.name} backgroundColor={theme.accent} color="black">
               {padded}

@@ -30,13 +30,14 @@ export interface AppAgentInfo {
   builtin: boolean;
 }
 
-type ModalKind = "agent" | "model" | "theme";
+type ModalKind = "agent" | "model" | "theme" | "info";
 interface ModalState {
   kind: ModalKind;
   title: string;
   items: SelectItem[];
   query: string;
   index: number;
+  variant: "select" | "info";
 }
 
 interface AppProps {
@@ -125,25 +126,21 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         exit();
         return;
       case "clear":
+        // Wipe both the visible transcript and the agent's context.
         runtime.initSession();
         firstRef.current = true;
-        dispatch({ type: "notice", text: "Context cleared." });
+        dispatch({ type: "reset" });
         return;
       case "help":
-        dispatch({ type: "notice", text: CHAT_HELP });
+        openInfoModal("Help", CHAT_HELP.split("\n"));
         return;
       case "agents":
-        dispatch({
-          type: "notice",
-          text: agents
-            .map((a) => `  ${a.id}${a.builtin ? "" : " [custom]"} — ${a.description}`)
-            .join("\n"),
-        });
+        openAgentModal();
         return;
       case "agent": {
         const def = resolveAgent(cmd.name);
         if (!def) {
-          dispatch({ type: "error", text: `Unknown agent "${cmd.name}". Try /agents.` });
+          dispatch({ type: "error", text: `Unknown agent "${cmd.name}". Try /agent.` });
           return;
         }
         switchAgent(def);
@@ -165,15 +162,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         await switchModel(cmd.name);
         return;
       }
-      case "models": {
-        const { ok, models } = await runtime.checkProvider();
-        if (!ok) {
-          dispatch({ type: "error", text: "Provider unreachable." });
-          return;
-        }
-        dispatch({ type: "notice", text: `Models:\n${models.map((m) => `  ${m.name}`).join("\n")}` });
+      case "models":
+        await openModelModal();
         return;
-      }
       case "theme": {
         if (!themeNames().includes(cmd.name)) {
           dispatch({
@@ -185,15 +176,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         await switchTheme(cmd.name);
         return;
       }
-      case "tools": {
-        const list = getDefaultTools()
-          .map((t) => `  ${t.definition.name} — ${t.definition.description}`)
-          .join("\n");
-        dispatch({ type: "notice", text: `Tools:\n${list}` });
+      case "tools":
+        openInfoModal(
+          "Tools",
+          getDefaultTools().map((t) => `${t.definition.name} — ${t.definition.description}`),
+        );
         return;
-      }
       case "about":
-        dispatch({ type: "notice", text: aboutText() });
+        openInfoModal("About", aboutText().split("\n"));
         return;
       case "unknown":
         dispatch({ type: "error", text: `Unknown command "/${cmd.cmd}". Try /help.` });
@@ -224,39 +214,51 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     dispatch({ type: "notice", text: `Theme switched to ${name}.` });
   }
 
-  /** A palette selection: arg-taking commands open a modal; the rest run immediately. */
+  /** A palette selection: arg-taking commands open a picker; the rest run immediately. */
   function selectCommand(meta: CommandMeta): void {
     setValue("");
     setPaletteIndex(0);
-    if (meta.name === "agent") {
-      setModal({
-        kind: "agent",
-        title: "Select agent",
-        items: agents.map((a) => ({
-          value: a.id,
-          label: a.id,
-          desc: a.builtin ? a.description : `[custom] ${a.description}`,
-        })),
-        query: "",
-        index: 0,
-      });
-      return;
-    }
-    if (meta.name === "theme") {
-      setModal({
-        kind: "theme",
-        title: "Select theme",
-        items: themeNames().map((n) => ({ value: n, label: n })),
-        query: "",
-        index: 0,
-      });
-      return;
-    }
-    if (meta.name === "model") {
-      void openModelModal();
-      return;
-    }
+    if (meta.name === "agent") return openAgentModal();
+    if (meta.name === "theme") return openThemeModal();
+    if (meta.name === "model") return void openModelModal();
     void runCommand(parseChatInput(`/${meta.name}`));
+  }
+
+  function openAgentModal(): void {
+    setModal({
+      kind: "agent",
+      title: "Select agent",
+      variant: "select",
+      items: agents.map((a) => ({
+        value: a.id,
+        label: a.id,
+        desc: a.builtin ? a.description : `[custom] ${a.description}`,
+      })),
+      query: "",
+      index: 0,
+    });
+  }
+
+  function openThemeModal(): void {
+    setModal({
+      kind: "theme",
+      title: "Select theme",
+      variant: "select",
+      items: themeNames().map((n) => ({ value: n, label: n })),
+      query: "",
+      index: 0,
+    });
+  }
+
+  function openInfoModal(title: string, lines: string[]): void {
+    setModal({
+      kind: "info",
+      title,
+      variant: "info",
+      items: lines.map((l) => ({ value: "", label: l })),
+      query: "",
+      index: 0,
+    });
   }
 
   async function openModelModal(): Promise<void> {
@@ -268,6 +270,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     setModal({
       kind: "model",
       title: "Select model",
+      variant: "select",
       items: models.map((m) => ({ value: m.name, label: m.name })),
       query: "",
       index: 0,
@@ -323,7 +326,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     setSelectedToolId(toolIds[idx]);
   }
 
-  function moveModal(dir: -1 | 1): void {
+  function moveModal(dir: number): void {
     setModal((m) => (m ? { ...m, index: clampIndex(m.index + dir, filterItems(m.items, m.query).length) } : m));
   }
 
@@ -338,9 +341,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       return;
     }
 
-    // Modal owns navigation; its search field handles typing + Enter.
+    // Modal owns navigation; a select modal's search field handles typing + Enter.
     if (modal) {
       if (key.escape) {
+        setModal(null);
+        return;
+      }
+      // Info modals have no input, so Enter just closes them.
+      if (key.return && modal.variant === "info") {
         setModal(null);
         return;
       }
@@ -350,6 +358,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       }
       if (key.downArrow) {
         moveModal(1);
+        return;
+      }
+      if (key.pageUp) {
+        moveModal(-8);
+        return;
+      }
+      if (key.pageDown) {
+        moveModal(8);
         return;
       }
       return;
@@ -442,6 +458,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
             query={modal.query}
             index={modal.index}
             width={contentWidth}
+            variant={modal.variant}
             onQueryChange={(q) => setModal((m) => (m ? { ...m, query: q, index: 0 } : m))}
             onSubmit={(v) => void applySelection(v)}
           />

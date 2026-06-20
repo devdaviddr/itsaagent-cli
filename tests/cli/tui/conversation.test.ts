@@ -61,6 +61,23 @@ describe("conversation reducer — event sequence", () => {
   });
 });
 
+describe("conversation reducer — reset", () => {
+  it("wipes the transcript entirely (used by /clear)", () => {
+    let state = run([
+      { type: "user", text: "hi" },
+      { type: "answer", text: "hello" },
+      { type: "notice", text: "something" },
+      { type: "scrollUp", lines: 5 },
+    ]);
+    expect(state.entries.length).toBeGreaterThan(0);
+    state = conversationReducer(state, { type: "reset" });
+    expect(state.entries).toEqual([]);
+    expect(state.nextId).toBe(1);
+    expect(state.scrollOffset).toBe(0);
+    expect(state.following).toBe(true);
+  });
+});
+
 describe("conversation reducer — bounded live buffer", () => {
   it("accumulates chunks then clears on the step boundary", () => {
     let state = run([
