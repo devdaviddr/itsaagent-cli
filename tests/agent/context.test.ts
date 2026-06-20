@@ -50,6 +50,26 @@ describe("ContextManager", () => {
     expect(contents).not.toContain("a".repeat(350));
   });
 
+  it("folds the work-so-far digest into the eviction notice (summarize-on-evict)", () => {
+    const ctx = new ContextManager(200, undefined, undefined, () => "- Files written/edited: server.js");
+    ctx.add({ role: "system", content: "system" });
+    ctx.add({ role: "user", content: "build it" });
+    ctx.add({ role: "user", content: "x".repeat(900) }); // forces an eviction
+    const notice = ctx.get().find((m) => m.notice);
+    expect(notice).toBeDefined();
+    expect(notice?.content).toMatch(/Work so far/);
+    expect(notice?.content).toContain("server.js"); // survives even though raw output was trimmed
+  });
+
+  it("omits the digest section when nothing was examined", () => {
+    const ctx = new ContextManager(200, undefined, undefined, () => "- (nothing was examined during planning)");
+    ctx.add({ role: "system", content: "system" });
+    ctx.add({ role: "user", content: "task" });
+    ctx.add({ role: "user", content: "y".repeat(900) });
+    const notice = ctx.get().find((m) => m.notice);
+    expect(notice?.content).not.toMatch(/Work so far/);
+  });
+
   it("clear() keeps the system message only", () => {
     const ctx = new ContextManager(10000);
     ctx.add({ role: "system", content: "You are an agent." });

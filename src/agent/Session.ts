@@ -54,7 +54,9 @@ export class Session {
     this.agent = opts.agent;
     this.model = opts.model;
     this.cwd = opts.cwd;
-    this.ctx = new ContextManager(opts.maxTokens, opts.onEvict, opts.onUsage);
+    // The digest is built from toolHistory (which is never trimmed), so "what was
+    // done" survives in the eviction notice even after raw tool results are evicted.
+    this.ctx = new ContextManager(opts.maxTokens, opts.onEvict, opts.onUsage, () => this.examinedSummary());
   }
 
   /** Active agent id, or "default" when the session is unscoped. */

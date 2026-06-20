@@ -11,15 +11,20 @@ export class ContextManager {
   private evictedTotal = 0;
   private onEvict?: (count: number) => void;
   private onUsage?: (usage: { total: number; max: number; ratio: number }) => void;
+  /** Deterministic "work so far" digest, folded into the eviction notice so it
+   * survives even when raw tool results are trimmed. */
+  private summarize?: () => string;
 
   constructor(
     maxTokens: number,
     onEvict?: (count: number) => void,
     onUsage?: (usage: { total: number; max: number; ratio: number }) => void,
+    summarize?: () => string,
   ) {
     this.maxTokens = maxTokens;
     this.onEvict = onEvict;
     this.onUsage = onUsage;
+    this.summarize = summarize;
   }
 
   add(msg: Omit<Message, "timestamp">): void {
@@ -109,9 +114,16 @@ export class ContextManager {
    * written to the session log (it carries the `notice` flag).
    */
   private upsertNotice(): void {
-    const content =
+    let content =
       `[CONTEXT NOTICE: ${this.evictedTotal} message(s) were trimmed to stay within the ` +
       `context window. The original task and the most recent results are preserved.]`;
+
+    // Fold in the deterministic "work so far" digest so what was done survives
+    // even after the raw tool results that produced it are evicted.
+    const digest = this.summarize?.();
+    if (digest && !digest.startsWith("- (nothing")) {
+      content += `\nWork so far (full record retained even though raw output was trimmed):\n${digest}`;
+    }
 
     const existing = this.messages.find((m) => m.notice);
     if (existing) {
