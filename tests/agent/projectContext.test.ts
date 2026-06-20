@@ -98,6 +98,22 @@ describe("AgentRuntime loads AGENTS.md from the session cwd", () => {
     expect(system?.content).toContain("ALWAYS run pnpm test");
   });
 
+  it("injects git context (branch) when the session cwd is a repo", async () => {
+    const { execFileSync } = await import("node:child_process");
+    root = realpathSync(mkdtempSync(join(tmpdir(), "iaa-pcgit-")));
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "t@t.local"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "T"], { cwd: root });
+    writeFileSync(join(root, "x.txt"), "hi");
+    setSessionCwd(root);
+    const rt = new AgentRuntime(makeConfig());
+    scripted(rt);
+    await rt.run("hi");
+    const system = rt.session.ctx.get().find((m) => m.role === "system");
+    expect(system?.content).toContain("## Git");
+    expect(system?.content).toMatch(/Branch:/);
+  });
+
   it("does not inject when projectContext is disabled", async () => {
     root = realpathSync(mkdtempSync(join(tmpdir(), "iaa-pc-")));
     writeFileSync(join(root, "AGENTS.md"), "secret marker phrase");

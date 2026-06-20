@@ -73,6 +73,8 @@ export interface AgentConfig {
   fewShot?: boolean;
   /** Auto-load the nearest AGENTS.md into the prompt (default true). */
   projectContext?: boolean;
+  /** Inject git state (branch, changes, recent commits) into the prompt (default true). */
+  gitContext?: boolean;
   /** Context compaction mode + the window fraction that triggers it. */
   compaction?: import("./agent/compaction.js").CompactionMode;
   compactionThreshold?: number;
