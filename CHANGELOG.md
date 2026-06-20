@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 > Work toward a more dynamic local-model harness (spec/v0.7.0.md), from a 7-dimension multi-agent review.
 
+### Added (Phase 6: provider depth)
+- **Per-model profiles + tunable sampling.** `src/providers/modelProfiles.ts` supplies sampling defaults per model-name pattern (qwen-coder, mistral, gemma, deepseek, + fallback), replacing the hardcoded `0.15`/`8192` for every model. `temperature`, `numPredict`, and `stop` are now settable in config and override the profile — so you can tune a model (e.g. a local gemma4 fine-tune) without editing source.
+- **Bounded retries with backoff** in the Ollama provider — a transient connection failure or 5xx (common on a cold model load or after a model swap) is retried up to twice with exponential backoff instead of killing the turn. `stop` sequences are now passed through to the model. (Constrained `format` decoding was evaluated and deferred — invasive, and largely redundant once native tool calls + `num_ctx` are in place.)
+
 ### Changed (Phase 4: per-model prompt)
 - **The system prompt now adapts to the model's tool-calling mode.** When the model supports native function-calling, the prompt drops the text `<tool_call>` XML schema and tells it to call tools directly — previously it taught the XML format even in native mode, a contradictory "emit native *and* XML" instruction that made small models waste turns. Final answers still use `<answer>` in both modes. The prompt is rebuilt once native capability is detected (history preserved).
 

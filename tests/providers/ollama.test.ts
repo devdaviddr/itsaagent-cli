@@ -47,4 +47,25 @@ describe("OllamaProvider request options", () => {
     await drain(new OllamaProvider(cfg()));
     expect(body.options.num_ctx).toBeUndefined();
   });
+
+  it("passes stop sequences when configured (Phase 6)", async () => {
+    let body: any;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      body = JSON.parse(String((init as RequestInit).body));
+      return new Response(doneStream(), { status: 200 });
+    });
+    await drain(new OllamaProvider(cfg({ stop: ["<|im_end|>"] })));
+    expect(body.options.stop).toEqual(["<|im_end|>"]);
+  });
+
+  it("retries on a 5xx then succeeds (Phase 6 cold-start resilience)", async () => {
+    let calls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      calls++;
+      if (calls === 1) return new Response("model loading", { status: 503 });
+      return new Response(doneStream(), { status: 200 });
+    });
+    await drain(new OllamaProvider(cfg()));
+    expect(calls).toBe(2); // retried once after the 503
+  });
 });

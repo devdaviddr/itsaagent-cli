@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentConfig, ProviderConfig } from "../types.js";
 import { AgentRegistry } from "../agent/AgentRegistry.js";
 import { DEFAULT_AGENT_ID } from "../agent/AgentDefinition.js";
+import { resolveModelProfile } from "../providers/modelProfiles.js";
 
 export const CONFIG_DIR = join(homedir(), ".config", "ai-cli");
 export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
@@ -35,6 +36,12 @@ export interface CliConfig {
    * Set false to A/B test prompt size vs. reliability with the e2e harness.
    */
   fewShot?: boolean;
+  /** Override sampling temperature (default: per-model profile, ~0.15). */
+  temperature?: number;
+  /** Override max tokens generated per turn (default: per-model profile, 8192). */
+  numPredict?: number;
+  /** Extra stop sequences passed to the model. */
+  stop?: string[];
 }
 
 export function defaultConfig(): CliConfig {
@@ -75,16 +82,21 @@ export async function toAgentConfig(
     throw new Error(`Unknown agent "${agentId}". Available: ${available}`);
   }
 
+  // Agent model override takes precedence over config, but an explicit --model flag wins.
+  const model = opts.model ?? agent.model ?? conf.model;
+  // Per-model profile supplies defaults; explicit config values override them.
+  const profile = resolveModelProfile(model);
+
   const providerConfig: ProviderConfig = {
     type: conf.providerType,
     baseUrl: opts.host ?? conf.host,
-    // Agent model override takes precedence over config, but an explicit --model flag wins.
-    model: opts.model ?? agent.model ?? conf.model,
-    temperature: 0.15,
-    maxTokens: 8192,
+    model,
+    temperature: conf.temperature ?? profile.temperature,
+    maxTokens: conf.numPredict ?? profile.numPredict,
     // Ask the model server for the full context window we manage client-side, so
     // it doesn't silently truncate to its small default (Ollama num_ctx).
     numCtx: conf.maxContextTokens,
+    stop: conf.stop ?? profile.stop,
   };
 
   return {
