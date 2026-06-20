@@ -27,7 +27,7 @@ export interface AppAgentInfo {
   builtin: boolean;
 }
 
-type ModalKind = "agent" | "model" | "theme" | "info";
+type ModalKind = "agent" | "model" | "theme" | "tools" | "info";
 interface ModalState {
   kind: ModalKind;
   title: string;
@@ -100,23 +100,26 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   // Reset the palette highlight whenever the input text changes.
   useEffect(() => setPaletteIndex(0), [value]);
 
-  // Keep the tuir Modal visibility in sync, and re-arm the main input on close.
-  // Depend ONLY on `modal` — showModal/hideModal/mainInput get fresh identities
-  // every render, so including them would re-run this effect each render and
-  // loop ("Maximum update depth exceeded").
+  // Keep the tuir Modal visibility in sync with our state. Depend ONLY on
+  // Boolean(modal) — showModal/hideModal get fresh identities every render, so
+  // including them would loop ("Maximum update depth exceeded").
   useEffect(() => {
-    if (modal) {
-      showModal();
-      return;
-    }
-    hideModal();
-    // The main TextInput's isFocus never changes, so its autoEnter effect won't
-    // re-fire after the modal's search input tears down. Re-enter insert mode
-    // on the next tick so typing works again.
-    const t = setTimeout(() => mainInput.enterInsert(), 0);
-    return () => clearTimeout(t);
+    if (modal) showModal();
+    else hideModal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(modal)]);
+
+  // Re-arm the main input whenever we return to idle with no modal open. The
+  // TextInput only auto-enters insert mode on (re)mount; commands like /clear or
+  // a typed /theme keep it mounted but exit insert mode, so without this the
+  // keyboard goes dead. Deferred a tick so it runs after the re-render settles.
+  useEffect(() => {
+    if (mode !== "running" && !modal) {
+      const t = setTimeout(() => mainInput.enterInsert(), 0);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, Boolean(modal)]);
 
   function runTurn(text: string): void {
     const cont = !firstRef.current;
@@ -185,10 +188,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         return;
       }
       case "tools":
-        openInfoModal(
-          "Tools",
-          getDefaultTools().map((t) => `${t.definition.name} — ${t.definition.description}`),
-        );
+        openToolsModal();
         return;
       case "about":
         openInfoModal("About", aboutText().split("\n"));
@@ -251,6 +251,35 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   function openInfoModal(title: string, lines: string[]): void {
     openModal({ kind: "info", title, variant: "info", index: 0, items: lines.map((l) => ({ value: "", label: l })) });
   }
+
+  function openToolsModal(): void {
+    openModal({
+      kind: "tools",
+      title: "Tools — select to view details",
+      variant: "select",
+      index: 0,
+      items: getDefaultTools().map((t) => ({
+        value: t.definition.name,
+        label: t.definition.name,
+        desc: t.definition.description,
+      })),
+    });
+  }
+
+  function openToolDetail(name: string): void {
+    const tool = getDefaultTools().find((t) => t.definition.name === name);
+    if (!tool) return;
+    const d = tool.definition;
+    const required = new Set(d.parameters.required);
+    const lines: string[] = [d.description, "", "Parameters:"];
+    const props = Object.entries(d.parameters.properties);
+    if (props.length === 0) lines.push("  (none)");
+    for (const [param, spec] of props) {
+      lines.push(`  ${param}  (${spec.type})${required.has(param) ? "  required" : ""}`);
+      lines.push(`     ${spec.description}`);
+    }
+    openInfoModal(`Tool: ${name}`, lines);
+  }
   async function openModelModal(): Promise<void> {
     const { ok, models } = await runtime.checkProvider();
     if (!ok) {
@@ -281,6 +310,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       await switchModel(selectedValue);
     } else if (kind === "theme") {
       await switchTheme(selectedValue);
+    } else if (kind === "tools") {
+      openToolDetail(selectedValue);
     }
   }
 
@@ -298,12 +329,10 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     if (live.length > 0) {
       selectCommand(live[clampIndex(paletteIndex, live.length)]);
       mainInput.setValue("");
-      mainInput.enterInsert();
       return;
     }
     mainInput.setValue("");
     if (v.trim()) void runCommand(parseChatInput(v));
-    mainInput.enterInsert();
   }
 
   const contentWidth = Math.max(20, width - 4);
