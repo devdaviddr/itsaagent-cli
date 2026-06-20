@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from "tuir";
 import type { Theme } from "../theme.js";
 
 // figlet "Standard" rendering of "iaa" — the empty-state logo.

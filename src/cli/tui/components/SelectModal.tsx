@@ -1,5 +1,4 @@
-import { Box, Text } from "ink";
-import TextInput from "ink-text-input";
+import { Box, Text, TextInput } from "tuir";
 import type { Theme } from "../theme.js";
 import { filterItems, clampIndex, type SelectItem } from "./select.js";
 
@@ -11,17 +10,19 @@ interface SelectModalProps {
   items: SelectItem[];
   query: string;
   index: number;
+  /** Inner content width (the tuir Modal owns the border + panel). */
   width: number;
-  variant?: ModalVariant;
-  onQueryChange: (q: string) => void;
+  variant: ModalVariant;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  searchOnChange: any;
   onSubmit: (value: string) => void;
+  onUpArrow: () => void;
+  onDownArrow: () => void;
 }
 
 /**
- * Centered floating dialog (opencode-style). `select` shows a search field and a
- * highlighted, choosable list; `info` is a read-only scrollable viewer (help,
- * tools, about). Width accounts for the round border (2 cols) + paddingX 2 (4
- * cols) so the highlight bar never overflows and wraps.
+ * Inner content of a floating dialog. `select` shows a search field + a
+ * highlighted, choosable list; `info` is a read-only scrollable viewer.
  */
 export function SelectModal({
   theme,
@@ -30,21 +31,18 @@ export function SelectModal({
   query,
   index,
   width,
-  variant = "select",
-  onQueryChange,
+  variant,
+  searchOnChange,
   onSubmit,
+  onUpArrow,
+  onDownArrow,
 }: SelectModalProps) {
   const isInfo = variant === "info";
   const maxRows = isInfo ? 14 : 8;
-  const boxWidth = Math.min(
-    Math.max(50, Math.floor(width * (isInfo ? 0.9 : 0.7))),
-    Math.max(50, width - 2),
-  );
-  const inner = boxWidth - 6; // round border (2) + paddingX 2 (4)
+  const inner = Math.max(10, width);
 
   const filtered = isInfo ? items : filterItems(items, query);
 
-  // select: cursor centered in the window. info: index is the scroll-top.
   let start: number;
   let sel: number;
   if (isInfo) {
@@ -55,21 +53,12 @@ export function SelectModal({
     start = Math.max(0, Math.min(sel - Math.floor(maxRows / 2), Math.max(0, filtered.length - maxRows)));
   }
   const shown = filtered.slice(start, start + maxRows);
-
   const truncate = (s: string): string => (s.length > inner ? s.slice(0, inner - 1) + "…" : s);
-
   const hint = isInfo ? "↑/↓ scroll · esc close" : "↑/↓ select · ↵ choose · esc cancel";
   const showCounter = filtered.length > maxRows;
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={theme.border}
-      paddingX={2}
-      paddingY={1}
-      width={boxWidth}
-    >
+    <Box flexDirection="column">
       <Box justifyContent="space-between">
         <Text bold color={theme.accent}>
           {title}
@@ -81,14 +70,18 @@ export function SelectModal({
         <Box marginY={1}>
           <Text color={theme.muted}>Search </Text>
           <TextInput
-            value={query}
-            onChange={onQueryChange}
-            onSubmit={() => filtered[sel] && onSubmit(filtered[sel].value)}
-            placeholder="filter…"
+            onChange={searchOnChange}
+            autoEnter
+            exitKeymap={{ key: "return" }}
+            onExit={() => filtered[sel] && onSubmit(filtered[sel].value)}
+            onUpArrow={onUpArrow}
+            onDownArrow={onDownArrow}
+            cursorColor={theme.accent}
+            textStyle={{ color: theme.assistant }}
           />
         </Box>
       ) : (
-        <Box marginBottom={1} />
+        <Box height={1} />
       )}
 
       {filtered.length === 0 ? (

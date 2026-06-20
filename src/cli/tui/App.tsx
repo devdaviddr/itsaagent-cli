@@ -1,15 +1,21 @@
-import { Box, useApp, useInput } from "ink";
+import {
+  Viewport,
+  Box,
+  Modal,
+  useApp,
+  useInput,
+  useModal,
+  useTextInput,
+  useViewportDimensions,
+} from "tuir";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { basename } from "node:path";
 import type { AgentRuntime } from "../../agent/AgentRuntime.js";
 import type { AgentDefinition } from "../../agent/AgentDefinition.js";
 import { getDefaultTools } from "../../tools/index.js";
 import { loadConfig, saveConfig } from "../config.js";
 import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCommand } from "../chatCommands.js";
-import {
-  conversationReducer,
-  initialConversation,
-} from "./state/conversation.js";
-import { basename } from "node:path";
+import { conversationReducer, initialConversation } from "./state/conversation.js";
 import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
 import { resolveTheme, themeNames } from "./theme.js";
@@ -19,7 +25,7 @@ import { InputBox } from "./layout/InputBox.js";
 import { StatusLine } from "./layout/StatusLine.js";
 import { Banner } from "./components/Banner.js";
 import { CommandPalette } from "./components/CommandPalette.js";
-import { SelectModal } from "./components/SelectModal.js";
+import { SelectModal, type ModalVariant } from "./components/SelectModal.js";
 import { filterItems, clampIndex, type SelectItem } from "./components/select.js";
 import { entryHeight, windowEntries } from "./layout/viewport.js";
 import type { TuiMode } from "./layout/chrome.js";
@@ -35,12 +41,11 @@ interface ModalState {
   kind: ModalKind;
   title: string;
   items: SelectItem[];
-  query: string;
   index: number;
-  variant: "select" | "info";
+  variant: ModalVariant;
 }
 
-interface AppProps {
+export interface AppProps {
   runtime: AgentRuntime;
   agents: AppAgentInfo[];
   resolveAgent: (name: string) => AgentDefinition | undefined;
@@ -49,17 +54,23 @@ interface AppProps {
   themeName?: string;
 }
 
-function termDims(): { rows: number; cols: number } {
-  return { rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 };
+/** Root: fullscreen Viewport wrapping the app (so useViewportDimensions works). */
+export function App(props: AppProps) {
+  return (
+    <Viewport flexDirection="column">
+      <AppInner {...props} />
+    </Viewport>
+  );
 }
 
-/**
- * The persistent TUI: centered home/log, a fixed input panel with a navigable
- * slash-command palette, and floating select modals for agent/model/theme. Owns
- * one AgentRuntime for the whole session — turns preserve context via continueChat().
- */
-export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
+function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
   const { exit } = useApp();
+  const { width, height } = useViewportDimensions();
+
+  const mainInput = useTextInput("");
+  const searchInput = useTextInput("");
+  const value = mainInput.value;
+  const query = searchInput.value;
 
   const [conv, dispatch] = useReducer(conversationReducer, undefined, initialConversation);
   const [mode, setMode] = useState<"idle" | "running">("idle");
@@ -67,29 +78,16 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const [agentId, setAgentId] = useState(runtime.agentId);
   const [model, setModel] = useState(runtime.model);
   const [themeName, setThemeName] = useState(initialThemeName);
-  const [value, setValue] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [selectedToolId, setSelectedToolId] = useState<number | null>(null);
-  const [dims, setDims] = useState(termDims());
   const firstRef = useRef(true);
-  /** True once the in-flight run has been asked to cancel — a second Ctrl+C then quits. */
   const cancelArmedRef = useRef(false);
 
   const theme = resolveTheme(themeName);
+  const { modal: modalObj, showModal, hideModal } = useModal({ show: null, hide: null });
 
-  useEffect(() => {
-    const onResize = (): void => setDims(termDims());
-    process.stdout.on("resize", onResize);
-    return () => {
-      process.stdout.off("resize", onResize);
-    };
-  }, []);
-
-  useAgentEvents(runtime, dispatch, {
-    onUsage: setUsage,
-    onIdle: () => setMode("idle"),
-  });
+  useAgentEvents(runtime, dispatch, { onUsage: setUsage, onIdle: () => setMode("idle") });
 
   useEffect(() => {
     runtime.initSession();
@@ -97,10 +95,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function onChangeValue(v: string): void {
-    setValue(v);
-    setPaletteIndex(0);
-  }
+  // Reset the palette highlight whenever the input text changes.
+  useEffect(() => setPaletteIndex(0), [value]);
+
+  // Keep the tuir Modal visibility in sync with our modal state.
+  useEffect(() => {
+    if (modal) showModal();
+    else hideModal();
+  }, [modal, showModal, hideModal]);
 
   function runTurn(text: string): void {
     const cont = !firstRef.current;
@@ -116,7 +118,6 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     });
   }
 
-  /** Execute a fully-parsed command (typed with its argument, or selected from the palette). */
   async function runCommand(cmd: ChatCommand): Promise<void> {
     switch (cmd.kind) {
       case "message":
@@ -126,7 +127,6 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         exit();
         return;
       case "clear":
-        // Wipe both the visible transcript and the agent's context.
         runtime.initSession();
         firstRef.current = true;
         dispatch({ type: "reset" });
@@ -153,10 +153,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
           return;
         }
         if (!models.some((m) => m.name === cmd.name)) {
-          dispatch({
-            type: "error",
-            text: `Unknown model "${cmd.name}". Available: ${models.map((m) => m.name).join(", ")}`,
-          });
+          dispatch({ type: "error", text: `Unknown model "${cmd.name}".` });
           return;
         }
         await switchModel(cmd.name);
@@ -167,10 +164,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         return;
       case "theme": {
         if (!themeNames().includes(cmd.name)) {
-          dispatch({
-            type: "error",
-            text: `Unknown theme "${cmd.name}". Available: ${themeNames().join(", ")}`,
-          });
+          dispatch({ type: "error", text: `Unknown theme "${cmd.name}".` });
           return;
         }
         await switchTheme(cmd.name);
@@ -214,72 +208,58 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     dispatch({ type: "notice", text: `Theme switched to ${name}.` });
   }
 
-  /** A palette selection: arg-taking commands open a picker; the rest run immediately. */
-  function selectCommand(meta: CommandMeta): void {
-    setValue("");
-    setPaletteIndex(0);
-    if (meta.name === "agent") return openAgentModal();
-    if (meta.name === "theme") return openThemeModal();
-    if (meta.name === "model") return void openModelModal();
-    void runCommand(parseChatInput(`/${meta.name}`));
+  function openModal(state: ModalState): void {
+    searchInput.setValue("");
+    setModal(state);
   }
-
   function openAgentModal(): void {
-    setModal({
+    openModal({
       kind: "agent",
       title: "Select agent",
       variant: "select",
+      index: 0,
       items: agents.map((a) => ({
         value: a.id,
         label: a.id,
         desc: a.builtin ? a.description : `[custom] ${a.description}`,
       })),
-      query: "",
-      index: 0,
     });
   }
-
   function openThemeModal(): void {
-    setModal({
+    openModal({
       kind: "theme",
       title: "Select theme",
       variant: "select",
+      index: 0,
       items: themeNames().map((n) => ({ value: n, label: n })),
-      query: "",
-      index: 0,
     });
   }
-
   function openInfoModal(title: string, lines: string[]): void {
-    setModal({
-      kind: "info",
-      title,
-      variant: "info",
-      items: lines.map((l) => ({ value: "", label: l })),
-      query: "",
-      index: 0,
-    });
+    openModal({ kind: "info", title, variant: "info", index: 0, items: lines.map((l) => ({ value: "", label: l })) });
   }
-
   async function openModelModal(): Promise<void> {
     const { ok, models } = await runtime.checkProvider();
     if (!ok) {
       dispatch({ type: "error", text: "Provider unreachable." });
       return;
     }
-    setModal({
+    openModal({
       kind: "model",
       title: "Select model",
       variant: "select",
-      items: models.map((m) => ({ value: m.name, label: m.name })),
-      query: "",
       index: 0,
+      items: models.map((m) => ({ value: m.name, label: m.name })),
     });
+  }
+
+  function closeModal(): void {
+    setModal(null);
+    searchInput.setValue("");
   }
 
   async function applySelection(selectedValue: string): Promise<void> {
     const kind = modal?.kind;
-    setModal(null);
+    closeModal();
     if (kind === "agent") {
       const def = resolveAgent(selectedValue);
       if (def) switchAgent(def);
@@ -290,34 +270,39 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     }
   }
 
-  async function handleSubmit(raw: string): Promise<void> {
-    // If the palette is open, Enter chooses the highlighted command rather than
-    // submitting the partial text.
-    const live = matchCommands(raw);
-    if (live.length > 0) {
-      selectCommand(live[clampIndex(paletteIndex, live.length)]);
-      return;
-    }
-    setValue("");
-    if (!raw.trim()) return;
-    await runCommand(parseChatInput(raw));
+  function selectCommand(meta: CommandMeta): void {
+    mainInput.setValue("");
+    setPaletteIndex(0);
+    if (meta.name === "agent") return openAgentModal();
+    if (meta.name === "theme") return openThemeModal();
+    if (meta.name === "model") return void openModelModal();
+    void runCommand(parseChatInput(`/${meta.name}`));
   }
 
-  const contentWidth = Math.max(20, dims.cols - 3);
+  function handleMainSubmit(v: string): void {
+    const live = matchCommands(v);
+    if (live.length > 0) {
+      selectCommand(live[clampIndex(paletteIndex, live.length)]);
+      mainInput.setValue("");
+      mainInput.enterInsert();
+      return;
+    }
+    mainInput.setValue("");
+    if (v.trim()) void runCommand(parseChatInput(v));
+    mainInput.enterInsert();
+  }
+
+  const contentWidth = Math.max(20, width - 3);
   const matches = matchCommands(value);
   const paletteOpen = !modal && mode !== "running" && matches.length > 0;
-  // Keep the whole frame one line short of the terminal: when an Ink frame fills
-  // the full height it can no longer diff in place and repaints everything each
-  // update, which flickers. One spare line lets it patch incrementally.
-  const appHeight = Math.max(8, dims.rows - 1);
-  // Reserve rows for the input panel (3), hint + status bar (2), and any open palette.
-  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
+  const logRows = Math.max(3, height - 6 - (paletteOpen ? matches.length : 0));
   const heights = conv.entries.map((e) => entryHeight(e, contentWidth));
   const win = windowEntries(heights, logRows, conv.scrollOffset);
   const visible = conv.entries.slice(win.startIndex, win.endIndex);
 
   const toolIds = conv.entries.filter((e) => e.kind === "tool").map((e) => e.id);
   const selected = selectedToolId ?? (toolIds.length > 0 ? toolIds[toolIds.length - 1] : null);
+  const modalInnerWidth = Math.max(10, Math.floor(width * 0.6) - 6);
 
   function moveSelection(dir: -1 | 1): void {
     if (toolIds.length === 0) return;
@@ -325,11 +310,19 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     const idx = Math.min(toolIds.length - 1, Math.max(0, toolIds.indexOf(cur) + dir));
     setSelectedToolId(toolIds[idx]);
   }
-
   function moveModal(dir: number): void {
-    setModal((m) => (m ? { ...m, index: clampIndex(m.index + dir, filterItems(m.items, m.query).length) } : m));
+    setModal((m) => (m ? { ...m, index: clampIndex(m.index + dir, filterItems(m.items, query).length) } : m));
+  }
+  function onMainUp(): void {
+    if (paletteOpen) setPaletteIndex((i) => clampIndex(i - 1, matches.length));
+    else if (value === "") moveSelection(-1);
+  }
+  function onMainDown(): void {
+    if (paletteOpen) setPaletteIndex((i) => clampIndex(i + 1, matches.length));
+    else if (value === "") moveSelection(1);
   }
 
+  // Global keys: Ctrl+C, Ctrl+R, Tab, Esc, and info-modal nav (no text field there).
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       if (mode === "running" && !cancelArmedRef.current) {
@@ -340,75 +333,33 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       exit();
       return;
     }
-
-    // Modal owns navigation; a select modal's search field handles typing + Enter.
     if (modal) {
-      if (key.escape) {
-        setModal(null);
+      if (key.esc) {
+        closeModal();
         return;
       }
-      // Info modals have no input, so Enter just closes them.
-      if (key.return && modal.variant === "info") {
-        setModal(null);
-        return;
-      }
-      if (key.upArrow) {
-        moveModal(-1);
-        return;
-      }
-      if (key.downArrow) {
-        moveModal(1);
-        return;
-      }
-      if (key.pageUp) {
-        moveModal(-8);
-        return;
-      }
-      if (key.pageDown) {
-        moveModal(8);
-        return;
+      if (modal.variant === "info") {
+        if (key.return) closeModal();
+        else if (key.up) moveModal(-1);
+        else if (key.down) moveModal(1);
       }
       return;
     }
-
-    // Palette open: ↑/↓ navigate, Tab completes, Esc closes. Enter is handled by the input's onSubmit.
-    if (paletteOpen) {
-      if (key.upArrow) {
-        setPaletteIndex((i) => clampIndex(i - 1, matches.length));
-        return;
-      }
-      if (key.downArrow) {
-        setPaletteIndex((i) => clampIndex(i + 1, matches.length));
-        return;
-      }
-      if (key.tab) {
-        const m = matches[clampIndex(paletteIndex, matches.length)];
-        setValue(`/${m.name}${m.arg ? " " : ""}`);
-        setPaletteIndex(0);
-        return;
-      }
-      if (key.escape) {
-        setValue("");
-        setPaletteIndex(0);
-        return;
-      }
-      return;
-    }
-
     if (key.ctrl && input === "r") {
       const anyCollapsed = conv.entries.some((e) => e.kind === "tool" && !e.expanded);
       dispatch({ type: "toggleExpandAll", expanded: anyCollapsed });
       return;
     }
-    if (key.pageUp) {
-      dispatch({ type: "scrollUp", lines: logRows });
+    if (paletteOpen) {
+      if (key.tab) {
+        const m = matches[clampIndex(paletteIndex, matches.length)];
+        mainInput.setValue(`/${m.name}${m.arg ? " " : ""}`);
+        return;
+      }
+      if (key.esc) mainInput.setValue("");
       return;
     }
-    if (key.pageDown) {
-      dispatch({ type: "scrollDown", lines: logRows });
-      return;
-    }
-    if (key.escape) {
+    if (key.esc) {
       if (mode === "running") {
         cancelArmedRef.current = true;
         runtime.cancel();
@@ -417,52 +368,20 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       }
       return;
     }
-    // With an empty input, arrow/enter drive tool-block focus instead of text editing.
-    if (value === "") {
-      if (key.upArrow) {
-        moveSelection(-1);
-        return;
-      }
-      if (key.downArrow) {
-        moveSelection(1);
-        return;
-      }
-      if (key.return && selected !== null) {
-        dispatch({ type: "toggleExpand", id: selected });
-        return;
-      }
+    if (value === "" && key.return && selected !== null) {
+      dispatch({ type: "toggleExpand", id: selected });
     }
   });
 
-  const lastIsError =
-    conv.entries.length > 0 && conv.entries[conv.entries.length - 1].kind === "error";
+  const lastIsError = conv.entries.length > 0 && conv.entries[conv.entries.length - 1].kind === "error";
   const tuiMode: TuiMode =
     mode === "running" ? "running" : !conv.following ? "scrolled" : lastIsError ? "error" : "idle";
-
   const isEmpty = conv.entries.length === 0 && mode !== "running";
-  const centered = Boolean(modal) || isEmpty;
 
   return (
-    <Box flexDirection="column" paddingX={1} height={appHeight}>
-      <Box
-        flexGrow={1}
-        flexDirection="column"
-        justifyContent={centered ? "center" : "flex-end"}
-        alignItems={modal ? "center" : undefined}
-      >
-        {modal ? (
-          <SelectModal
-            theme={theme}
-            title={modal.title}
-            items={modal.items}
-            query={modal.query}
-            index={modal.index}
-            width={contentWidth}
-            variant={modal.variant}
-            onQueryChange={(q) => setModal((m) => (m ? { ...m, query: q, index: 0 } : m))}
-            onSubmit={(v) => void applySelection(v)}
-          />
-        ) : isEmpty ? (
+    <Box flexDirection="column" height="100" paddingX={1}>
+      <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
+        {isEmpty ? (
           <Banner theme={theme} />
         ) : (
           <MessageLog
@@ -475,25 +394,20 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         )}
       </Box>
       {paletteOpen ? (
-        <CommandPalette
-          matches={matches}
-          theme={theme}
-          width={contentWidth}
-          index={clampIndex(paletteIndex, matches.length)}
-        />
+        <CommandPalette matches={matches} theme={theme} width={contentWidth} index={clampIndex(paletteIndex, matches.length)} />
       ) : null}
-      {!modal ? (
-        <InputBox
-          theme={theme}
-          agent={agentId}
-          model={model}
-          value={value}
-          onChange={onChangeValue}
-          onSubmit={handleSubmit}
-          running={mode === "running"}
-          providerOk={providerOk}
-        />
-      ) : null}
+      <InputBox
+        theme={theme}
+        agent={agentId}
+        model={model}
+        onChange={mainInput.onChange}
+        value={value}
+        onSubmit={handleMainSubmit}
+        onUpArrow={onMainUp}
+        onDownArrow={onMainDown}
+        running={mode === "running"}
+        providerOk={providerOk}
+      />
       <StatusLine
         theme={theme}
         mode={tuiMode}
@@ -502,6 +416,33 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         version={VERSION}
         ctxRatio={usage ? usage.ratio : null}
       />
+      <Modal
+        modal={modalObj}
+        justifySelf="center"
+        alignSelf="center"
+        width="60"
+        borderStyle="round"
+        borderColor={theme.border}
+        flexDirection="column"
+        paddingX={2}
+        paddingY={1}
+      >
+        {modal ? (
+          <SelectModal
+            theme={theme}
+            title={modal.title}
+            items={modal.items}
+            query={query}
+            index={modal.index}
+            width={modalInnerWidth}
+            variant={modal.variant}
+            searchOnChange={searchInput.onChange}
+            onSubmit={(v) => void applySelection(v)}
+            onUpArrow={() => moveModal(-1)}
+            onDownArrow={() => moveModal(1)}
+          />
+        ) : null}
+      </Modal>
     </Box>
   );
 }

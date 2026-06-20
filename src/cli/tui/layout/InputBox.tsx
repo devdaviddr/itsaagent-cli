@@ -1,7 +1,6 @@
-import { Box, Text } from "ink";
-import TextInput from "ink-text-input";
+import { Box, Text, TextInput } from "tuir";
 import type { Theme } from "../theme.js";
-import { Spinner } from "../Spinner.js";
+import { SpinnerT } from "../components/SpinnerT.js";
 
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
@@ -11,18 +10,22 @@ interface InputBoxProps {
   theme: Theme;
   agent: string;
   model: string;
+  /** Opaque binding from useTextInput in the parent. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onChange: any;
   value: string;
-  onChange: (v: string) => void;
   onSubmit: (v: string) => void;
+  onUpArrow: () => void;
+  onDownArrow: () => void;
   running: boolean;
   providerOk: boolean;
 }
 
 /**
  * opencode-style input panel: a left accent bar, the prompt/placeholder, and an
- * agent · model footer inside the panel. Swaps to a working indicator mid-run.
+ * agent · model footer. The text value is owned by the parent's useTextInput.
  */
-export function InputBox({ theme, agent, model, value, onChange, onSubmit, running, providerOk }: InputBoxProps) {
+export function InputBox({ theme, agent, model, onChange, value, onSubmit, onUpArrow, onDownArrow, running, providerOk }: InputBoxProps) {
   return (
     <Box
       flexDirection="column"
@@ -36,18 +39,27 @@ export function InputBox({ theme, agent, model, value, onChange, onSubmit, runni
       <Box>
         {running ? (
           <>
-            <Spinner color={theme.accent} />
+            <SpinnerT color={theme.accent} />
             <Text color={theme.muted}> working…</Text>
           </>
         ) : (
           <>
             <Text color={theme.accent}>{"› "}</Text>
             <TextInput
-              value={value}
               onChange={onChange}
-              onSubmit={onSubmit}
-              placeholder={'Ask anything…  "list the typescript files and count lines"'}
+              autoEnter
+              exitKeymap={{ key: "return" }}
+              onExit={(v: string) => onSubmit(v)}
+              onUpArrow={onUpArrow}
+              onDownArrow={onDownArrow}
+              cursorColor={theme.accent}
+              textStyle={{ color: theme.assistant }}
             />
+            {value.length === 0 ? (
+              <Text color={theme.muted} dimColor>
+                {'Ask anything…  "list the typescript files and count lines"'}
+              </Text>
+            ) : null}
           </>
         )}
       </Box>

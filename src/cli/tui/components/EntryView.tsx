@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from "tuir";
 import type { Entry } from "../state/conversation.js";
 import type { Theme } from "../theme.js";
 import { ToolBlock } from "./ToolBlock.js";

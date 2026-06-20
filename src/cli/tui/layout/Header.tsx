@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from "tuir";
 import type { Theme } from "../theme.js";
 import { ctxColor } from "../theme.js";
 import { buildBar } from "../../contextBar.js";

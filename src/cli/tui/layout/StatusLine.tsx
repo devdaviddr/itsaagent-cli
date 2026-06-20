@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from "tuir";
 import type { Theme } from "../theme.js";
 import { statusHint, type TuiMode } from "./chrome.js";
 

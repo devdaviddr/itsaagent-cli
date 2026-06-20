@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from "tuir";
 import type { ToolEntry } from "../state/conversation.js";
 import type { Theme } from "../theme.js";
 import { resultLines, clampLines, moreMarker, collapsedSummary } from "./toolFormat.js";

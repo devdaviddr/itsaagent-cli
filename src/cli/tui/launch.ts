@@ -26,27 +26,24 @@ export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
   }));
   const resolveAgent = (name: string) => registry.get(name);
 
-  const { render } = await import("ink");
+  const { render, preserveScreen } = await import("tuir");
   const { createElement } = await import("react");
   const { App } = await import("./App.js");
 
-  process.stdout.write("\x1b[?1049h"); // enter alternate screen
-  try {
-    const { waitUntilExit } = render(
-      createElement(App, {
-        runtime: opts.runtime,
-        agents,
-        resolveAgent,
-        seedTask: opts.seedTask,
-        providerOk: opts.providerOk ?? true,
-        themeName: opts.themeName,
-      }),
-      { exitOnCtrlC: false },
-    );
-    await waitUntilExit();
-  } finally {
-    process.stdout.write("\x1b[?1049l"); // leave alternate screen, restore scrollback
-  }
+  // preserveScreen() saves/restores the terminal (alternate-screen equivalent).
+  preserveScreen();
+  const { waitUntilExit } = render(
+    createElement(App, {
+      runtime: opts.runtime,
+      agents,
+      resolveAgent,
+      seedTask: opts.seedTask,
+      providerOk: opts.providerOk ?? true,
+      themeName: opts.themeName,
+    }),
+    { exitOnCtrlC: false },
+  );
+  await waitUntilExit();
 }
 
 /** Build a default runtime from config and launch the TUI (used for the no-arg `iaa`). */
