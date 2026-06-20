@@ -11,6 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Mouse/trackpad wheel scroll in the TUI is now **opt-in** (`mouse: true` in `~/.config/ai-cli/config.json`). It was capturing mouse events, which disabled native terminal text-selection/copy. Keyboard scroll (↑/↓, Ctrl+U/D) works regardless; with `mouse: true`, hold Option (macOS) to select.
 
 ### Fixed
+- **Working directory now persists across tool calls.** Each `bash` command ran in a fresh shell, so a `cd` was lost and later commands ran in the launch directory — e.g. "build an express api" did `cd express-hello-world` then `npm init`/`npm install`/`write_file`, which all dumped into the user's **home directory**, leaving the project folder empty. A shared session cwd now carries `cd` to subsequent `bash` calls and to the file tools (`write_file`, `read_file`, `glob`, `grep`, …), like a real terminal.
 - Build agent reliability — "File created successfully" with no file actually created. Three root causes:
   - **Parser priority:** small models often emit a tool call *and* an `<answer>` in one response (the answer fabricated before the tool ran). The parser checked `<answer>` first and threw the tool call away. Tool calls are now parsed **before** `<answer>`, so the tool runs and the model answers next turn.
   - **Prompt:** added rules that any real action MUST be a `<tool_call>` and that the model must never claim success without an actual `[TOOL RESULT]`; create files via `write_file(path, content)`.

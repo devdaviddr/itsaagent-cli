@@ -344,3 +344,27 @@ describe("tilde (~) home expansion", () => {
     }
   });
 });
+
+import { mkdtempSync } from "node:fs";
+import { realpathSync } from "node:fs";
+import { bashTool } from "../../src/tools/bash.js";
+import { resetSessionCwd } from "../../src/tools/session.js";
+
+describe("session working directory persists across bash + file tools", () => {
+  afterEach(() => resetSessionCwd());
+
+  it("cd in bash carries to later bash and to write_file", async () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), "iaa-sess-")));
+    try {
+      await bashTool.execute({ command: `cd ${base}` });
+      const pwd = await bashTool.execute({ command: "pwd" });
+      expect(pwd.data.trim()).toBe(base);
+      // relative write_file lands in the session cwd, not the launch dir
+      const w = await writeFileTool.execute({ path: "app.js", content: "ok" });
+      expect(w.data).toContain(join(base, "app.js"));
+      expect((await stat(join(base, "app.js"))).isFile()).toBe(true);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+});
