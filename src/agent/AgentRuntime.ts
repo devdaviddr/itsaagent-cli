@@ -10,6 +10,8 @@ import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
 import { parseResponse, stableKey, looksLikeMidTaskAnswer, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
+import { findProjectContext, formatProjectContext } from "./projectContext.js";
+import { getSessionCwd } from "../tools/session.js";
 import { agentPermitsTool, MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
 export interface AgentRuntimeEvents {
@@ -283,12 +285,20 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   }
 
   /** Rebuild the system prompt now that native-tool capability is known, so it
-   * teaches the format the model will actually use (preserves history). */
+   * teaches the format the model will actually use (preserves history). Also
+   * re-discovers the nearest AGENTS.md from the session cwd, so project context
+   * loads/unloads dynamically as the agent cd's between projects. */
   private refreshSystemPrompt(): void {
+    let projectContext: string | undefined;
+    if (this.config.projectContext !== false) {
+      const found = findProjectContext(getSessionCwd());
+      if (found) projectContext = formatProjectContext(found);
+    }
     this.ctx.setSystemPrompt(
       buildSystemPrompt(this.permittedTools(), process.cwd(), this.agent?.systemPromptSuffix, this.config.skills, {
         fewShot: this.config.fewShot,
         nativeTools: this.toolUseMode === true,
+        projectContext,
       }),
     );
   }

@@ -69,6 +69,8 @@ export interface AgentConfig {
   skills?: Skill[];
   /** Include the few-shot exemplar in the system prompt (default true). */
   fewShot?: boolean;
+  /** Auto-load the nearest AGENTS.md into the prompt (default true). */
+  projectContext?: boolean;
   /** Restore a saved session (resume) instead of starting fresh. */
   restore?: import("./agent/Session.js").SerializedSession;
 }
