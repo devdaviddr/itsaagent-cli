@@ -1,5 +1,8 @@
 import chalk from "chalk";
 import type { AgentRuntime } from "../agent/AgentRuntime.js";
+import type { AgentRegistry } from "../agent/AgentRegistry.js";
+import type { ProcessDef } from "../agent/Process.js";
+import { runProcess } from "../agent/ProcessRunner.js";
 import { contextLine, usageLevel } from "./contextBar.js";
 
 const isTTY = Boolean(process.stdout.isTTY && process.stderr.isTTY);
@@ -32,6 +35,36 @@ function colourContextLine(used: number, max: number, ratio: number): string {
 
 export async function runAgent(runtime: AgentRuntime, task: string, continueChat = false): Promise<string> {
   return isTTY ? renderWithInk(runtime, task, continueChat) : renderPlain(runtime, task, continueChat);
+}
+
+/**
+ * Run a multi-stage process (e.g. guided: plan → build) with plain progress
+ * output, resolving on the FINAL stage's answer (unlike runAgent, which resolves
+ * on the first). Each stage is announced; verbose mode streams thoughts/tools.
+ */
+export async function runProcessAgent(
+  runtime: AgentRuntime,
+  registry: AgentRegistry,
+  proc: ProcessDef,
+  task: string,
+): Promise<string> {
+  const verbose = runtime.verbose;
+  if (verbose) {
+    runtime.on("step", ({ index, total }) => console.error(chalk.bold(`\n[${index}/${total}]`)));
+    runtime.on("thought", ({ text }) => console.error(chalk.yellow(`  thought: ${text.split("\n")[0]}`)));
+    runtime.on("tool:call", ({ name, args }) => console.error(chalk.cyan(`  tool: ${name} ${JSON.stringify(args)}`)));
+    runtime.on("tool:result", ({ result }) => {
+      if (!result.success) console.error(chalk.red(`  error: ${result.error}`));
+      else if (result.data) console.error(chalk.dim(`  result: ${(result.data.length > 120 ? result.data.slice(0, 120) + "…" : result.data).replace(/\n/g, " ")}`));
+    });
+  }
+  runtime.on("ask", ({ question }) => console.error(chalk.magenta(`  ask: ${question}`)));
+
+  const total = proc.stages.length;
+  return runProcess(runtime, registry, proc, task, {
+    onStage: (index, label, agentId) =>
+      console.error(chalk.bold(`\n— Stage ${index + 1}/${total}: ${label} (${agentId}) —`)),
+  });
 }
 
 async function renderWithInk(runtime: AgentRuntime, task: string, continueChat: boolean): Promise<string> {
