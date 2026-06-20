@@ -41,7 +41,8 @@ export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
       providerOk: opts.providerOk ?? true,
       themeName: opts.themeName,
     }),
-    { exitOnCtrlC: false },
+    // throttle coalesces spinner ticks + keystrokes into fewer frames.
+    { exitOnCtrlC: false, throttle: 16 },
   );
   await waitUntilExit();
 }

@@ -98,11 +98,19 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
   // Reset the palette highlight whenever the input text changes.
   useEffect(() => setPaletteIndex(0), [value]);
 
-  // Keep the tuir Modal visibility in sync with our modal state.
+  // Keep the tuir Modal visibility in sync, and re-arm the main input on close.
   useEffect(() => {
-    if (modal) showModal();
-    else hideModal();
-  }, [modal, showModal, hideModal]);
+    if (modal) {
+      showModal();
+      return;
+    }
+    hideModal();
+    // The main TextInput's isFocus never changes, so its autoEnter effect won't
+    // re-fire after the modal's search input tears down. Re-enter insert mode
+    // on the next tick so typing works again.
+    const t = setTimeout(() => mainInput.enterInsert(), 0);
+    return () => clearTimeout(t);
+  }, [modal, showModal, hideModal, mainInput]);
 
   function runTurn(text: string): void {
     const cont = !firstRef.current;
@@ -295,7 +303,10 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
   const contentWidth = Math.max(20, width - 3);
   const matches = matchCommands(value);
   const paletteOpen = !modal && mode !== "running" && matches.length > 0;
-  const logRows = Math.max(3, height - 6 - (paletteOpen ? matches.length : 0));
+  // Render one row short of the terminal so total output height < rows; tuir
+  // full-clears (flickers) only when output height >= rows.
+  const appHeight = Math.max(8, height - 1);
+  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
   const heights = conv.entries.map((e) => entryHeight(e, contentWidth));
   const win = windowEntries(heights, logRows, conv.scrollOffset);
   const visible = conv.entries.slice(win.startIndex, win.endIndex);
@@ -379,7 +390,7 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
   const isEmpty = conv.entries.length === 0 && mode !== "running";
 
   return (
-    <Box flexDirection="column" height="100" paddingX={1}>
+    <Box flexDirection="column" height={appHeight} paddingX={1}>
       <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
         {isEmpty ? (
           <Banner theme={theme} />
@@ -416,18 +427,18 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
         version={VERSION}
         ctxRatio={usage ? usage.ratio : null}
       />
-      <Modal
-        modal={modalObj}
-        justifySelf="center"
-        alignSelf="center"
-        width="60"
-        borderStyle="round"
-        borderColor={theme.border}
-        flexDirection="column"
-        paddingX={2}
-        paddingY={1}
-      >
-        {modal ? (
+      {modal ? (
+        <Modal
+          modal={modalObj}
+          justifySelf="center"
+          alignSelf="center"
+          width="60"
+          borderStyle="round"
+          borderColor={theme.border}
+          flexDirection="column"
+          paddingX={2}
+          paddingY={1}
+        >
           <SelectModal
             theme={theme}
             title={modal.title}
@@ -441,8 +452,8 @@ function AppInner({ runtime, agents, resolveAgent, seedTask, providerOk, themeNa
             onUpArrow={() => moveModal(-1)}
             onDownArrow={() => moveModal(1)}
           />
-        ) : null}
-      </Modal>
+        </Modal>
+      ) : null}
     </Box>
   );
 }

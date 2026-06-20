@@ -7,7 +7,7 @@ const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "
 export function SpinnerT({ color }: { color?: string }) {
   const [i, setI] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setI((n) => (n + 1) % FRAMES.length), 80);
+    const t = setInterval(() => setI((n) => (n + 1) % FRAMES.length), 120);
     return () => clearInterval(t);
   }, []);
   return <Text color={color ?? "cyan"}>{FRAMES[i]}</Text>;
