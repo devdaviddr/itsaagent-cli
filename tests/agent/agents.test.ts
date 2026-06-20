@@ -129,6 +129,22 @@ describe("Agent system prompt scoping", () => {
     expect(prompt.toLowerCase()).not.toContain("express");
   });
 
+  it("does not duplicate the system prompt across initSession() + the first run()", async () => {
+    const build = new AgentRegistry().get("build")!;
+    const runtime = new AgentRuntime(makeConfig(build));
+    (runtime as unknown as { provider: unknown }).provider = {
+      async *stream() {
+        for (const c of "<answer>ok</answer>") yield { delta: c, done: false };
+        yield { delta: "", done: true };
+      },
+    };
+    (runtime as unknown as { toolUseMode: boolean }).toolUseMode = false;
+    runtime.initSession();
+    await runtime.run("hi");
+    const systems = runtime.session.ctx.get().filter((m) => m.role === "system").length;
+    expect(systems).toBe(1);
+  });
+
   it("plan agent keeps gathering info until it can plan correctly", () => {
     const plan = new AgentRegistry().get("plan")!;
     const prompt = systemPrompt(new AgentRuntime(makeConfig(plan)));

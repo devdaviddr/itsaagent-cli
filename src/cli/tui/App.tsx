@@ -5,6 +5,7 @@ import type { AgentRuntime } from "../../agent/AgentRuntime.js";
 import type { AgentDefinition } from "../../agent/AgentDefinition.js";
 import { getDefaultTools } from "../../tools/index.js";
 import { loadConfig, saveConfig } from "../config.js";
+import { saveSessionTranscript } from "../saveTranscript.js";
 import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCommand } from "../chatCommands.js";
 import { GUIDED_PROCESS, nextStageIndex, type ProcessDef } from "../../agent/Process.js";
 import { conversationReducer, initialConversation, lastAnswer } from "./state/conversation.js";
@@ -258,6 +259,15 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         return;
       case "guided":
         startGuided(cmd.task);
+        return;
+      case "save":
+        try {
+          const conf = await loadConfig();
+          const path = await saveSessionTranscript(runtime.session, cmd.path, conf.logDir);
+          dispatch({ type: "notice", text: `Saved session transcript → ${path}` });
+        } catch (err) {
+          dispatch({ type: "error", text: `Could not save transcript: ${err instanceof Error ? err.message : String(err)}` });
+        }
         return;
       case "unknown":
         dispatch({ type: "error", text: `Unknown command "/${cmd.cmd}". Try /help.` });

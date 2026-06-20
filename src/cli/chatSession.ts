@@ -6,6 +6,7 @@ import { BUILTIN_AGENT_IDS } from "../agent/AgentDefinition.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { runAgent } from "./output.js";
 import { parseChatInput, CHAT_HELP } from "./chatCommands.js";
+import { saveSessionTranscript } from "./saveTranscript.js";
 
 /**
  * Interactive chat loop shared by `iaa chat` and the home menu.
@@ -70,6 +71,17 @@ export async function runChatSession(runtime: AgentRuntime): Promise<void> {
         const conf = await loadConfig();
         await saveConfig({ ...conf, model: cmd.name });
         console.error(chalk.green(`  Model switched to ${cmd.name}.\n`));
+        break;
+      }
+
+      case "save": {
+        try {
+          const conf = await loadConfig();
+          const path = await saveSessionTranscript(runtime.session, cmd.path, conf.logDir);
+          console.error(chalk.green(`  Saved session transcript → ${path}\n`));
+        } catch (err) {
+          console.error(chalk.red(`  Could not save transcript: ${err instanceof Error ? err.message : String(err)}\n`));
+        }
         break;
       }
 
