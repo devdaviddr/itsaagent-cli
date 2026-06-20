@@ -4,6 +4,7 @@ import { createProvider } from "../providers/index.js";
 import type { Provider } from "../providers/Provider.js";
 import { getDefaultTools } from "../tools/index.js";
 import { ContextManager } from "./ContextManager.js";
+import { Session } from "./Session.js";
 import { LoopDetectedError, MaxStepsError, toErrorMessage } from "./errors.js";
 import type { AgentError } from "./errors.js";
 import { SessionLogger } from "./SessionLogger.js";
@@ -38,10 +39,10 @@ function formatToolResult(tool: string, args: Record<string, unknown>, result: T
 export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private readonly config: AgentConfig;
   private provider: Provider;
-  private readonly ctx: ContextManager;
+  /** The chat session that owns context, the active agent, model, cwd, and tool history. */
+  readonly session: Session;
   private readonly tools: Map<string, Tool>;
   private readonly logger: SessionLogger;
-  private agent?: AgentDefinition;
   /** Cached native-tool-use capability of the active model (detected once per model). */
   private toolUseMode: boolean | undefined;
   /** True while a run/continueChat loop is in flight; gates cancel(). */
@@ -52,17 +53,19 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   constructor(config: AgentConfig) {
     super();
     this.config = config;
-    this.agent = config.agent;
     this.provider = createProvider(config.provider);
-    this.ctx = new ContextManager(
-      config.maxContextTokens,
-      (evicted) => {
-        this.emit("context:evict", { evicted, ratio: this.ctx.usage().ratio });
+    this.session = new Session({
+      agent: config.agent,
+      model: config.provider.model,
+      cwd: process.cwd(),
+      maxTokens: config.maxContextTokens,
+      onEvict: (evicted) => {
+        this.emit("context:evict", { evicted, ratio: this.session.ctx.usage().ratio });
       },
-      (usage) => {
+      onUsage: (usage) => {
         this.emit("context:usage", { used: usage.total, max: usage.max, ratio: usage.ratio });
       },
-    );
+    });
     this.logger = new SessionLogger(config.logDir);
     this.tools = new Map();
     for (const t of getDefaultTools()) {
@@ -72,18 +75,23 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.on("error", () => {});
   }
 
+  /** Conversation context, owned by the session. */
+  private get ctx(): ContextManager { return this.session.ctx; }
+  /** Active agent, owned by the session. */
+  private get agent(): AgentDefinition | undefined { return this.session.agent; }
+
   /** Expose verbose flag so output layer can read it without a private cast */
   get verbose(): boolean { return this.config.verbose; }
 
   /** Active agent id (or "default" when unscoped). */
-  get agentId(): string { return this.agent?.id ?? "default"; }
+  get agentId(): string { return this.session.agentId; }
 
   /** Active model name. */
-  get model(): string { return this.config.provider.model; }
+  get model(): string { return this.session.model; }
 
   /** Switch the active agent. Re-scopes permitted tools; the next initSession() rebuilds the prompt. */
   setAgent(def: AgentDefinition): void {
-    this.agent = def;
+    this.session.setAgent(def);
   }
 
   /**
@@ -104,6 +112,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   /** Switch the model. Recreates the provider; tool-use capability is re-detected on the next run. */
   setModel(model: string): void {
     this.config.provider.model = model;
+    this.session.model = model;
     this.provider = createProvider(this.config.provider);
     this.toolUseMode = undefined;
   }
@@ -156,6 +165,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       };
     }
     try {
+      this.session.recordTool(name, args);
       return await tool.execute(args);
     } catch (err: unknown) {
       return { success: false, data: "", error: toErrorMessage(err) };
@@ -177,8 +187,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const startTime = Date.now();
     this.ctx.add({ role: "user", content: task });
     await this.detectToolUse();
-    await this.logger.init(task, this.config.provider.model, process.cwd());
-    this.emit("start", { task, model: this.config.provider.model, cwd: process.cwd(), logPath: this.logger.filePath });
+    await this.logger.init(task, this.session.model, process.cwd());
+    this.emit("start", { task, model: this.session.model, cwd: process.cwd(), logPath: this.logger.filePath });
     return this.runLoop(startTime);
   }
 
@@ -191,8 +201,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.ctx.add({ role: "user", content: task });
 
     await this.detectToolUse();
-    await this.logger.init(task, this.config.provider.model, cwd);
-    this.emit("start", { task, model: this.config.provider.model, cwd, logPath: this.logger.filePath });
+    await this.logger.init(task, this.session.model, cwd);
+    this.emit("start", { task, model: this.session.model, cwd, logPath: this.logger.filePath });
     return this.runLoop(startTime);
   }
 
