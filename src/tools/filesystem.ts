@@ -206,30 +206,83 @@ export const editFileTool: Tool = {
   definition: {
     name: "edit_file",
     description:
-      "Replace lines start_line..end_line (1-indexed, inclusive) of a file with new_content. To insert before a line without removing anything, set end_line = start_line - 1. Returns a unified diff.",
+      "Edit a file. PREFERRED: pass old_string (the exact existing text to change) and new_string (what to replace it with). old_string must match the file character-for-character and occur exactly once — include enough surrounding context (whole lines) to be unique. This is the reliable way to change code: you do NOT count line numbers, so you can't hit the wrong line. ALTERNATIVELY (only when you can't quote the text, e.g. pure insertion or deleting a span), use line mode: start_line and end_line (1-indexed, inclusive) with new_content; set end_line = start_line-1 to insert, empty new_content to delete. Returns a diff.",
     parameters: {
       type: "object",
       properties: {
         path: { type: "string", description: "Absolute or relative path to the file" },
-        start_line: { type: "number", description: "1-indexed first line to replace (inclusive)" },
-        end_line: { type: "number", description: "1-indexed last line to replace (inclusive); use start_line-1 to insert" },
-        new_content: { type: "string", description: "Replacement text (empty string deletes the range)" },
+        old_string: { type: "string", description: "Exact existing text to replace (must occur exactly once). Preferred over line numbers." },
+        new_string: { type: "string", description: "Replacement text for old_string (empty string deletes it)" },
+        start_line: { type: "number", description: "Line mode only: 1-indexed first line to replace (inclusive)" },
+        end_line: { type: "number", description: "Line mode only: 1-indexed last line to replace; use start_line-1 to insert" },
+        new_content: { type: "string", description: "Line mode only: replacement text for the range (empty deletes it)" },
       },
-      required: ["path", "start_line", "end_line", "new_content"],
+      required: ["path"],
     },
   },
   async execute(args): Promise<ToolResult> {
     const path = resolveSessionPath(String(args.path ?? ""));
+    let original: string;
+    try {
+      original = await readFile(path, "utf-8");
+    } catch {
+      return { success: false, data: "", error: `No such file: ${path}` };
+    }
+
+    const hasOldString = args.old_string !== undefined && args.old_string !== null;
+    const hasLineRange = args.start_line !== undefined && args.start_line !== null;
+
+    // --- Preferred: exact string replacement (no line counting) ---
+    if (hasOldString) {
+      const oldString = String(args.old_string);
+      const newString = String(args.new_string ?? "");
+      if (oldString === "") {
+        return { success: false, data: "", error: "old_string must not be empty. To insert text, use line mode (end_line = start_line-1)." };
+      }
+      const occurrences = original.split(oldString).length - 1;
+      if (occurrences === 0) {
+        return {
+          success: false,
+          data: "",
+          error: `old_string was not found in ${path}. The file may differ from what you expect — read it first, then copy the exact text (including whitespace) to replace.`,
+        };
+      }
+      if (occurrences > 1) {
+        return {
+          success: false,
+          data: "",
+          error: `old_string occurs ${occurrences} times in ${path}; it must be unique. Include more surrounding context (e.g. whole lines above/below) so it matches exactly one place.`,
+        };
+      }
+      // Literal replacement of the single occurrence ($ in new_string stays literal).
+      const updated = original.replace(oldString, () => newString);
+      try {
+        await writeFile(path, updated, "utf-8");
+      } catch (err: unknown) {
+        return { success: false, data: "", error: err instanceof Error ? err.message : String(err) };
+      }
+      const diff = [
+        `--- ${path} (before)`,
+        `+++ ${path} (after)`,
+        ...oldString.split("\n").map((l) => `-${l}`),
+        ...newString.split("\n").map((l) => `+${l}`),
+      ].join("\n");
+      return { success: true, data: diff };
+    }
+
+    if (!hasLineRange) {
+      return {
+        success: false,
+        data: "",
+        error: "Provide old_string + new_string (preferred), or start_line + end_line + new_content for line mode.",
+      };
+    }
+
+    // --- Line mode: replace/insert/delete a line range ---
     const start = Number(args.start_line);
     const end = Number(args.end_line);
     const newContent = String(args.new_content ?? "");
     try {
-      let original: string;
-      try {
-        original = await readFile(path, "utf-8");
-      } catch {
-        return { success: false, data: "", error: `No such file: ${path}` };
-      }
       const lines = original.split("\n");
       const total = lines.length;
 
