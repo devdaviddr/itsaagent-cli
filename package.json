@@ -1,6 +1,6 @@
 {
   "name": "itsaagent",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "ItsAAgent — Ollama-optimised ReAct agent for the CLI. Think, plan, execute on local hardware.",
   "author": "Daniel Ruffolo (https://github.com/devdaviddr)",
   "license": "MIT",

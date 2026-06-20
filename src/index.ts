@@ -19,7 +19,7 @@ const collect = (val: string, acc: string[]): string[] => { acc.push(val); retur
 program
   .name("iaa")
   .description("ItsAAgent — Ollama-optimised ReAct agent for the CLI")
-  .version("0.5.1")
+  .version("0.6.0")
   .option("-v, --verbose", "Show agent reasoning, tool calls, and stream output live")
   .option("-l, --log", "Write session log to disk (auto-enabled with -v)")
   .option("-m, --model <model>", "Override the model for this run")

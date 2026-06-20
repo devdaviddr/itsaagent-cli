@@ -7,7 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] — 2026-06-20
+
+### Added
+- **Sessions** — a chat now runs inside a first-class `Session` that owns its context, active agent, model, working directory, and tool history. Agent hand-offs happen *within* a session, so context and exploration carry across the plan → build boundary instead of being thrown away.
+- **`ask_user` tool** — a clarification primitive. When a request is ambiguous or needs information only you have (a name, a choice, a value), the agent asks one specific question and waits for your answer instead of guessing. In non-interactive `iaa run`, it proceeds with stated assumptions.
+- **Guided process** (`/guided <task>`) — plan a task, let the plan agent clarify ambiguities via `ask_user`, then press **Tab** to hand the approach off to `build` for execution. A status line tracks the stage (`Guided · plan ✓ — Tab → build`).
+
 ### Changed
+- **Compact hand-off summary** — handing a plan to `build` now seeds it with the plan *plus* a deduped "already explored" summary (files read, searches run, commands run, files written during planning), so build doesn't re-discover what plan already learned.
+- **Slim system prompt** — consolidated from 15 numbered rules to 7 sharp, high-impact ones with no loss of the critical rules (one-tool-per-response + `"name"`/`"args"` format, anti-hallucination, real-home-dir/cwd-persists, OS-appropriate non-interactive commands, `ask_user`-on-ambiguity, no-repeat/stop-on-failure). Re-measured: `qwen2.5-coder-7b-32k:latest` create-file 3/3 + express-api PASS; `qwen2.5-coder:7b` create-file 3/3 (up from 2/3).
 - Mouse/trackpad wheel scroll in the TUI is now **opt-in** (`mouse: true` in `~/.config/ai-cli/config.json`). It was capturing mouse events, which disabled native terminal text-selection/copy. Keyboard scroll (↑/↓, Ctrl+U/D) works regardless; with `mouse: true`, hold Option (macOS) to select.
 
 ### Fixed
