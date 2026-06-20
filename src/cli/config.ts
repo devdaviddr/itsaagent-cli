@@ -38,6 +38,8 @@ export interface CliConfig {
    * Set false to A/B test prompt size vs. reliability with the e2e harness.
    */
   fewShot?: boolean;
+  /** Auto-load the nearest AGENTS.md into the system prompt (default true). */
+  projectContext?: boolean;
   /** Override sampling temperature (default: per-model profile, ~0.15). */
   temperature?: number;
   /** Override max tokens generated per turn (default: per-model profile, 8192). */
@@ -111,5 +113,6 @@ export async function toAgentConfig(
     logDir: opts.log || opts.verbose ? conf.logDir : undefined,
     agent,
     fewShot: conf.fewShot,
+    projectContext: conf.projectContext,
   };
 }

@@ -24,6 +24,8 @@ export interface PromptOptions {
   fewShot?: boolean;
   /** The model uses native function-calling; drop the XML <tool_call> format from the prompt. */
   nativeTools?: boolean;
+  /** Pre-formatted project-context block (from AGENTS.md) to pin into the prompt. */
+  projectContext?: string;
 }
 
 /** One short worked trajectory: Thought → tool call → [TOOL RESULT] → wait → answer.
@@ -111,6 +113,10 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
   ].join("\n");
 
   let prompt = agentSuffix ? `${base}\n\n${agentSuffix}` : base;
+
+  if (opts.projectContext) {
+    prompt = `${prompt}\n\n${opts.projectContext}`;
+  }
 
   if (skills && skills.length > 0) {
     const blocks = skills.map((s) => `## Active Skill: ${s.name}\n${s.body}`).join("\n\n");

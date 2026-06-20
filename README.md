@@ -19,7 +19,8 @@ Built for developers who want an autonomous agent without a cloud subscription.
 
 - **ReAct loop** — Thought → Action → Observation, repeated until done or the step limit is reached
 - **Native tool calling** — uses Ollama's function-calling API for capable models, with a text parser as automatic fallback
-- **Sessions** — every chat runs inside a `Session` that owns its context, agent, model, and working directory; agent hand-offs happen *within* a session, so exploration and context carry across them
+- **Project context (`AGENTS.md`)** — working in a code folder, the agent auto-loads the nearest `AGENTS.md` (walking up from its working dir) into the prompt, and reloads it as it `cd`s between projects — so build/test commands and conventions ground the model without you repeating them (`projectContext: false` to disable)
+- **Sessions** — every chat runs inside a `Session` that owns its context, agent, model, and working directory; agent hand-offs happen *within* a session, so exploration and context carry across them; sessions autosave and resume (`iaa chat --resume`, `iaa sessions`)
 - **Built-in agents** — `build` (full access) and `plan` (read-only analysis); each scopes which tools the model may call. In the TUI, `plan` produces an approach you can hand off to `build` by pressing **Tab**
 - **Guided process** — `/guided <task>` plans the work, asks you to clarify any ambiguities (`ask_user`), then hands the approach to `build` on **Tab**; the plan agent carries a compact "already explored" summary across the hand-off. Run it headless with `iaa run --process guided "<task>"`
 - **Self-verification** — before finishing a build that changed something, the agent confirms the work with a tool (read it back, `ls`, or `run_tests`) instead of trusting a claim; failures get one best-effort recovery turn rather than a dead-end
