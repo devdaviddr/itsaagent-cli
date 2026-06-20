@@ -1,8 +1,10 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { AgentRuntime } from "../../agent/AgentRuntime.js";
+import { AgentRegistry } from "../../agent/AgentRegistry.js";
+import { getProcess } from "../../agent/Process.js";
 import { loadConfig, toAgentConfig, CONFIG_PATH } from "../config.js";
-import { runAgent, selectRenderMode, isInteractiveTTY } from "../output.js";
+import { runAgent, runProcessAgent, selectRenderMode, isInteractiveTTY } from "../output.js";
 import { launchTui } from "../tui/launch.js";
 import { resolveCliSkills } from "../skillResolve.js";
 import { loadSkills } from "../../agent/SkillLoader.js";
@@ -12,7 +14,8 @@ export function registerRunCommand(program: Command): void {
     .command("run <task...>")
     .description("Execute a task. Prefix with /skill-name to run a skill (e.g. run /refactor src/x.ts).")
     .option("-i, --interactive", "Open the persistent TUI seeded with the task (stays open for follow-ups)")
-    .action(async (taskParts: string[], cmdOpts: { interactive?: boolean }) => {
+    .option("--process <id>", "Run an advised process end-to-end (e.g. 'guided': plan → build)")
+    .action(async (taskParts: string[], cmdOpts: { interactive?: boolean; process?: string }) => {
       const conf = await loadConfig();
       const opts = program.optsWithGlobals<{
         verbose?: boolean; log?: boolean; model?: string; host?: string;
@@ -68,6 +71,19 @@ export function registerRunCommand(program: Command): void {
           `Model "${agentConfig.provider.model}" not found. Available: ${models.map((m) => m.name).join(", ") || "none"}`,
         ));
         process.exit(1);
+      }
+
+      // Advised process (e.g. --process guided): run the staged pipeline headless.
+      if (cmdOpts.process) {
+        const proc = getProcess(cmdOpts.process);
+        if (!proc) {
+          console.error(chalk.red(`Unknown process "${cmdOpts.process}". Available: guided`));
+          process.exit(1);
+        }
+        const registry = await AgentRegistry.create();
+        const answer = await runProcessAgent(runtime, registry, proc, task);
+        console.log(answer);
+        return;
       }
 
       const renderMode = selectRenderMode({
