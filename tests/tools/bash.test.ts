@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { bashTool } from "../../src/tools/bash.js";
+import { getSessionCwd, resetSessionCwd } from "../../src/tools/session.js";
 
 describe("bashTool", () => {
   it("runs a simple command and returns stdout", async () => {
@@ -31,5 +36,36 @@ describe("bashTool", () => {
     const result = await bashTool.execute({ command: "echo output; exit 2" });
     expect(result.data.trim()).toBe("output");
     expect(result.exitCode).toBe(2);
+  });
+});
+
+describe("bashTool cwd (fixes npm-writes-to-home)", () => {
+  afterEach(() => resetSessionCwd());
+
+  it("runs the command in the given cwd, not the home directory", async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "iaa-bashcwd-")));
+    try {
+      const result = await bashTool.execute({ command: "pwd", cwd: dir });
+      expect(result.success).toBe(true);
+      expect(result.data.trim()).toBe(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("persists the cwd to later calls (like cd)", async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "iaa-bashcwd-")));
+    try {
+      await bashTool.execute({ command: "true", cwd: dir });
+      expect(getSessionCwd()).toBe(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("errors clearly when the cwd does not exist", async () => {
+    const result = await bashTool.execute({ command: "pwd", cwd: join(tmpdir(), "iaa-does-not-exist-xyz") });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/does not exist or is not a directory/i);
   });
 });

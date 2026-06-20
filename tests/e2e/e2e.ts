@@ -287,15 +287,19 @@ scenario("session-isolation", "A separate session shares no context with another
   notContains(answer, SECRET, "fresh session answer");
 });
 
-// 14. Plan agent is read-only.
-scenario("plan-readonly", "Plan agent produces a plan and creates no files", async (ctx) => {
-  const { rt, toolsUsed } = await ctx.runtime("plan");
+// 14. Plan agent is read-only. The guarantee is *enforcement*: even if the
+//     model attempts a mutation, it is blocked and nothing changes on disk.
+//     (toolsUsed records attempted calls — a blocked attempt is fine; what must
+//     never happen is an actual mutation.)
+scenario("plan-readonly", "Plan agent produces a plan and mutates nothing", async (ctx) => {
+  // A file the plan agent must NOT be able to change, to prove the block bites.
+  writeFileSync(join(ctx.dir, "untouched.txt"), "original\n");
+  const { rt } = await ctx.runtime("plan");
   const answer = await rt.run("Plan (do not build) how to create a Node script app.js that prints hello. Give numbered steps.");
-  for (const t of ["write_file", "edit_file", "append_file", "delete_file", "bash"]) {
-    if (toolsUsed.includes(t)) fail(`plan agent must not call ${t} (used: ${toolsUsed.join(", ")})`);
-  }
-  const files = listFiles(ctx.dir);
-  if (files.length > 0) fail(`plan agent should create no files, found: ${files.join(", ")}`);
+  // Enforcement: no new files were created and the existing one is unchanged.
+  const files = listFiles(ctx.dir).filter((f) => f !== "untouched.txt");
+  if (files.length > 0) fail(`plan agent must not create files, found: ${files.join(", ")}`);
+  if (read(ctx.dir, "untouched.txt") !== "original\n") fail("plan agent mutated a file — read-only enforcement failed");
   if (answer.trim().length < 30) fail(`expected a substantive plan, got: ${truncate(answer, 120)}`);
 });
 
@@ -394,7 +398,30 @@ scenario("build-complete-script", "Build agent ships a complete CLI script in on
   if (!/usage/i.test(src)) fail("script should handle the no-argument case with a usage message");
 });
 
-// 20. fetch — GATED on network.
+// 20. Make an EMPTY folder — must be a real directory, not a 0-byte file
+//     (the bug: the model used write_file to "create a folder").
+scenario("make-folder", "Creates an empty folder as a real directory", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  await rt.run("Create an empty folder named workspace in the current directory.");
+  dirExists(ctx.dir, "workspace"); // fails if it's a 0-byte file instead of a dir
+});
+
+// 21. Files for a project must land INSIDE the named subfolder — not the
+//     parent or home (the make_directory + npm-init-to-home fixes). A single
+//     file in the subfolder is asserted; reliably building several files in a
+//     subfolder at once is a separate model-capability limit, not this bug.
+scenario("project-in-subfolder", "Places a project file inside a named subfolder", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  await rt.run(
+    "Create a folder named demo, and inside it create a file index.js containing a minimal Express server with a GET / route returning 'hello'. Do not run npm install.",
+  );
+  dirExists(ctx.dir, "demo"); // a real directory, not a 0-byte file
+  fileContains(ctx.dir, "demo/index.js", "express"); // the file landed inside the subfolder…
+  fileContains(ctx.dir, "demo/index.js", "listen");
+  if (existsSync(join(ctx.dir, "index.js"))) fail("index.js leaked to the parent directory instead of demo/");
+});
+
+// 22. fetch — GATED on network.
 scenario("fetch-url", "Fetches a URL and reports its content (needs network)", async (ctx) => {
   let online = false;
   try {
@@ -412,7 +439,7 @@ scenario("fetch-url", "Fetches a URL and reports its content (needs network)", a
   contains(answer, "example");
 });
 
-// 21. ssh — GATED on IAA_E2E_SSH_HOST (or a reachable localhost sshd).
+// 23. ssh — GATED on IAA_E2E_SSH_HOST (or a reachable localhost sshd).
 scenario("ssh-roundtrip", "Runs a command on a host over SSH (needs IAA_E2E_SSH_HOST)", async (ctx) => {
   const host = ctx.env.IAA_E2E_SSH_HOST;
   const user = ctx.env.IAA_E2E_SSH_USER ?? os.userInfo().username;

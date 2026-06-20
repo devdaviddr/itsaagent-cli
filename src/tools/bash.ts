@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
+import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import type { Tool, ToolResult } from "../types.js";
-import { getSessionCwd, setSessionCwd } from "./session.js";
+import { getSessionCwd, setSessionCwd, resolveSessionPath } from "./session.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,11 +24,12 @@ export const bashTool: Tool = {
   definition: {
     name: "bash",
     description:
-      "Execute a bash command on the host system. Returns stdout, stderr, and exit code. The working directory PERSISTS across calls — a `cd` carries over to later bash commands and to file tools (write_file, etc.), like a real terminal.",
+      "Execute a bash command on the host system. Returns stdout, stderr, and exit code. The working directory PERSISTS across calls — a `cd` carries over to later bash commands and to file tools (write_file, etc.), like a real terminal. Pass `cwd` to run inside a specific directory (e.g. a project folder) so the command doesn't run in the home directory.",
     parameters: {
       type: "object",
       properties: {
         command: { type: "string", description: "The bash command to execute" },
+        cwd: { type: "string", description: "Optional directory to run the command in (must already exist). Persists as the working directory afterwards, like cd." },
         timeout: { type: "number", description: "Timeout in milliseconds (default: 30000)" },
       },
       required: ["command"],
@@ -36,7 +38,15 @@ export const bashTool: Tool = {
   async execute(args): Promise<ToolResult> {
     const command = String(args.command ?? "");
     const timeout = Number(args.timeout ?? 30000);
-    const cwd = getSessionCwd();
+    let cwd = getSessionCwd();
+    if (args.cwd !== undefined && args.cwd !== null && String(args.cwd) !== "") {
+      const requested = resolveSessionPath(String(args.cwd));
+      const info = await stat(requested).catch(() => null);
+      if (!info || !info.isDirectory()) {
+        return { success: false, data: "", error: `cwd does not exist or is not a directory: ${requested}. Create it first with make_directory.` };
+      }
+      cwd = requested;
+    }
     // Run the command, then print the resulting directory so `cd` persists.
     const wrapped = `${command}\n__iaa_rc=$?\nprintf '\\n${CWD_MARKER}%s' "$(pwd)"\nexit $__iaa_rc`;
 

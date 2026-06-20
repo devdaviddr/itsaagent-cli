@@ -5,6 +5,7 @@ import {
   grepTool,
   readFileTool,
   writeFileTool,
+  makeDirectoryTool,
   appendFileTool,
   editFileTool,
   deleteFileTool,
@@ -26,6 +27,7 @@ export function getDefaultTools(): Tool[] {
     fetchTool,
     readFileTool,
     writeFileTool,
+    makeDirectoryTool,
     appendFileTool,
     editFileTool,
     deleteFileTool,
@@ -42,6 +44,7 @@ export { sshUploadTool, sshDownloadTool } from "./ssh.js";
 export {
   readFileTool,
   writeFileTool,
+  makeDirectoryTool,
   appendFileTool,
   editFileTool,
   deleteFileTool,
