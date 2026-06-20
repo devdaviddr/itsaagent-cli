@@ -104,10 +104,41 @@ export const readFileTool: Tool = {
   },
 };
 
+export const makeDirectoryTool: Tool = {
+  definition: {
+    name: "make_directory",
+    description:
+      "Create a directory (a folder), including any missing parent directories. Use this whenever you need to make a folder — NEVER create a directory by writing an empty file; that makes a file, not a folder.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Absolute or relative directory path to create" },
+      },
+      required: ["path"],
+    },
+  },
+  async execute(args): Promise<ToolResult> {
+    const path = resolveSessionPath(String(args.path ?? ""));
+    try {
+      const existing = await stat(path).catch(() => null);
+      if (existing) {
+        return existing.isDirectory()
+          ? { success: true, data: `Directory already exists: ${path}` }
+          : { success: false, data: "", error: `A file already exists at ${path} — remove it or choose another name.` };
+      }
+      await mkdir(path, { recursive: true });
+      return { success: true, data: `Created directory ${path}` };
+    } catch (err: unknown) {
+      return { success: false, data: "", error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+};
+
 export const writeFileTool: Tool = {
   definition: {
     name: "write_file",
-    description: "Write content to a file. Creates parent directories if needed.",
+    description:
+      "Write content to a file, replacing it if it exists. Parent directories are created automatically, so you do NOT need to make the folder first — just write the file at its full path. (To create an empty folder, use make_directory.)",
     parameters: {
       type: "object",
       properties: {
@@ -120,8 +151,22 @@ export const writeFileTool: Tool = {
   async execute(args): Promise<ToolResult> {
     const path = resolveSessionPath(String(args.path ?? ""));
     const content = String(args.content ?? "");
+    const dir = dirname(path);
     try {
-      await mkdir(dirname(path), { recursive: true });
+      await mkdir(dir, { recursive: true });
+    } catch (err: unknown) {
+      // A parent path component exists as a file, not a directory.
+      const info = await stat(dir).catch(() => null);
+      if (info && !info.isDirectory()) {
+        return {
+          success: false,
+          data: "",
+          error: `Cannot write ${path}: ${dir} exists as a file, not a directory. (To make a folder use make_directory — do not create a directory by writing an empty file.)`,
+        };
+      }
+      return { success: false, data: "", error: err instanceof Error ? err.message : String(err) };
+    }
+    try {
       await writeFile(path, content, "utf-8");
       return { success: true, data: `Wrote ${content.length} bytes to ${path}` };
     } catch (err: unknown) {

@@ -8,6 +8,7 @@ import {
   grepTool,
   readFileTool,
   writeFileTool,
+  makeDirectoryTool,
   appendFileTool,
   editFileTool,
   deleteFileTool,
@@ -18,6 +19,48 @@ const TEST_DIR = join(tmpdir(), `itsaagent-test-${process.pid}`);
 
 beforeEach(async () => { await mkdir(TEST_DIR, { recursive: true }); });
 afterEach(async () => { await rm(TEST_DIR, { recursive: true, force: true }); });
+
+describe("makeDirectoryTool", () => {
+  it("creates a real directory (not a file)", async () => {
+    const path = join(TEST_DIR, "newfolder");
+    const result = await makeDirectoryTool.execute({ path });
+    expect(result.success).toBe(true);
+    expect((await stat(path)).isDirectory()).toBe(true);
+  });
+
+  it("creates missing parent directories", async () => {
+    const path = join(TEST_DIR, "a", "b", "c");
+    const result = await makeDirectoryTool.execute({ path });
+    expect(result.success).toBe(true);
+    expect((await stat(path)).isDirectory()).toBe(true);
+  });
+
+  it("is idempotent when the directory already exists", async () => {
+    const path = join(TEST_DIR, "dir");
+    await mkdir(path);
+    const result = await makeDirectoryTool.execute({ path });
+    expect(result.success).toBe(true);
+  });
+
+  it("refuses when a FILE already exists at the path (the express-test bug)", async () => {
+    const path = join(TEST_DIR, "clash");
+    await writeFile(path, "", "utf-8"); // a 0-byte file, as the old mis-step produced
+    const result = await makeDirectoryTool.execute({ path });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/file already exists/i);
+  });
+});
+
+describe("writeFileTool — parent is a file", () => {
+  it("gives a clear error instead of a raw EEXIST when a parent path is a file", async () => {
+    const fileAsParent = join(TEST_DIR, "express-test");
+    await writeFile(fileAsParent, "", "utf-8"); // express-test is a FILE
+    const result = await writeFileTool.execute({ path: join(fileAsParent, "index.js"), content: "x" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/exists as a file, not a directory/i);
+    expect(result.error).toMatch(/make_directory/);
+  });
+});
 
 describe("readFileTool", () => {
   it("reads an existing file", async () => {

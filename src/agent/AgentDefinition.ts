@@ -28,6 +28,7 @@ export interface AgentDefinition {
  */
 export const MUTATION_TOOLS: ReadonlySet<string> = new Set([
   "write_file",
+  "make_directory",
   "edit_file",
   "append_file",
   "delete_file",

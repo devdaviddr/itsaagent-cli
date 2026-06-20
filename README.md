@@ -23,7 +23,7 @@ Built for developers who want an autonomous agent without a cloud subscription.
 - **Built-in agents** — `build` (full access) and `plan` (read-only analysis); each scopes which tools the model may call. In the TUI, `plan` produces an approach you can hand off to `build` by pressing **Tab**
 - **Guided process** — `/guided <task>` plans the work, asks you to clarify any ambiguities (`ask_user`), then hands the approach to `build` on **Tab**; the plan agent carries a compact "already explored" summary across the hand-off
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
-- **15 built-in tools** — `ask_user`, `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
+- **16 built-in tools** — `ask_user`, `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `make_directory`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
 - **Persistent TUI** — run `iaa` (or `iaa chat`) for a full-screen terminal app (built on `tuir`): line-by-line scrollback (keyboard + mouse), **token streaming**, markdown-styled answers, floating picker/info modals, inline `/`-autocomplete, and a live status bar
 - **Theming** — built-in colour themes (`default`, `mono`, `dracula`, `nord`, `gruvbox`) plus a fully user-defined `custom` theme (colours, backgrounds, bold weight) via config; switch live with `/theme`

@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **`make_directory` tool** — creates a folder (and any missing parents). Fixes a class of failures where, asked to "create a folder", the agent misused `write_file` and produced a **0-byte file** with the folder's name (so later writes into it failed with a confusing `EEXIST mkdir`). The prompt and tool descriptions now steer folder creation to `make_directory`, and `write_file` documents that it makes parent folders itself.
+
+### Fixed
+- **`bash` now honours a `cwd` argument.** Previously a command like `npm init -y` with `cwd` set was run in the session's directory regardless, so it could write `package.json` into the **home directory**. `bash` now runs in the requested `cwd` (validated to exist) and persists it like `cd`; the prompt tells the agent to `cd`/pass `cwd` when working inside a project folder.
+- **`write_file` gives a clear error** when a parent path component is a file instead of a directory (it used to surface a raw `EEXIST: mkdir …`), pointing at `make_directory`.
+
 ### Changed
 - **Agents now plan-first and build the whole solution.** Both built-in agents got a general (stack-agnostic) operating contract in their system-prompt suffix, fixing the "staggered" behaviour where the `build` agent would do one step (e.g. `npm install`) or create an empty file with `touch` and then stop, handing a half-finished result back. **Build** now: (1) plans the approach first when it wasn't handed a plan, (2) calls `ask_user` for anything unknown/ambiguous instead of guessing, (3) carries out every step and writes complete, runnable, best-practice code (full file contents via `write_file`, never stubs), and (4) only answers once the task actually works. **Plan** keeps gathering information (read/search/`ask_user`) until it can plan correctly, then emits a plan complete enough to build the whole thing. Verified general (not API-specific): a full Express API and an unrelated Node CLI script each build to completion 3/3.
 
