@@ -37,6 +37,8 @@ export interface ProviderConfig {
   apiKey?: string;
   temperature: number;
   maxTokens: number;
+  /** Context window (tokens) to request from the model server, e.g. Ollama num_ctx. */
+  numCtx?: number;
 }
 
 export interface SkillArg {
@@ -63,6 +65,8 @@ export interface AgentConfig {
   agent?: import("./agent/AgentDefinition.js").AgentDefinition;
   /** Active skills whose (interpolated) bodies extend the system prompt. */
   skills?: Skill[];
+  /** Include the few-shot exemplar in the system prompt (default true). */
+  fewShot?: boolean;
 }
 
 export interface ToolCall {

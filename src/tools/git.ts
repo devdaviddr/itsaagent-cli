@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Tool, ToolResult } from "../types.js";
+import { getSessionCwd, resolveSessionPath } from "./session.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -50,7 +51,8 @@ export const gitTool: Tool = {
   async execute(args): Promise<ToolResult> {
     const subcommand = String(args.subcommand ?? "").trim();
     const argStr = String(args.args ?? "");
-    const cwd = args.cwd ? String(args.cwd) : process.cwd();
+    // Honour the shared session cwd so `cd` (via bash) carries over to git, like a real terminal.
+    const cwd = args.cwd ? resolveSessionPath(String(args.cwd)) : getSessionCwd();
 
     if (!ALLOWED.has(subcommand)) {
       return { success: false, data: "", error: "subcommand not permitted" };

@@ -40,12 +40,14 @@ export class OllamaProvider implements Provider {
   private readonly model: string;
   private readonly temperature: number;
   private readonly maxTokens: number;
+  private readonly numCtx?: number;
 
   constructor(config: ProviderConfig) {
     this.baseUrl = config.baseUrl;
     this.model = config.model;
     this.temperature = config.temperature;
     this.maxTokens = config.maxTokens;
+    this.numCtx = config.numCtx;
   }
 
   async *stream(messages: ChatMessage[], tools?: ToolSpec[]): AsyncGenerator<StreamChunk> {
@@ -61,7 +63,13 @@ export class OllamaProvider implements Provider {
           // Always stream so responses render token-by-token; tool_calls are
           // accumulated across the streamed chunks below.
           stream: true,
-          options: { temperature: this.temperature, num_predict: this.maxTokens },
+          options: {
+            temperature: this.temperature,
+            num_predict: this.maxTokens,
+            // Request the full window we manage client-side; without this Ollama
+            // uses the model's small default and silently truncates our context.
+            ...(this.numCtx ? { num_ctx: this.numCtx } : {}),
+          },
           ...(useTools ? { tools } : {}),
         }),
       });
