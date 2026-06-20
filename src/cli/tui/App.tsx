@@ -6,6 +6,7 @@ import type { AgentDefinition } from "../../agent/AgentDefinition.js";
 import { getDefaultTools } from "../../tools/index.js";
 import { loadConfig, saveConfig } from "../config.js";
 import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCommand } from "../chatCommands.js";
+import { GUIDED_PROCESS, nextStageIndex, type ProcessDef } from "../../agent/Process.js";
 import { conversationReducer, initialConversation } from "./state/conversation.js";
 import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
@@ -88,6 +89,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   // Set while the agent is awaiting an answer to ask_user; the next submission
   // resolves it (instead of starting a new turn) and the loop continues.
   const [pendingAsk, setPendingAsk] = useState<{ resolve: (answer: string) => void } | null>(null);
+  // Active advised process (e.g. guided: plan → build), with the current stage index.
+  const [proc, setProc] = useState<{ def: ProcessDef; stage: number } | null>(null);
   const firstRef = useRef(true);
   const cancelArmedRef = useRef(false);
 
@@ -149,6 +152,26 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     });
   }
 
+  /** Start the guided process: plan the task, then Tab hands off to build. */
+  function startGuided(task: string): void {
+    const t = task.trim();
+    if (!t) {
+      dispatch({ type: "error", text: "Usage: /guided <task>  (e.g. /guided build an express api)" });
+      return;
+    }
+    const planDef = resolveAgent("plan");
+    if (!planDef) {
+      dispatch({ type: "error", text: "Plan agent not available." });
+      return;
+    }
+    runtime.setAgent(planDef);
+    setAgentId("plan");
+    firstRef.current = true; // fresh plan context seeded with the task
+    setProc({ def: GUIDED_PROCESS, stage: 0 });
+    dispatch({ type: "notice", text: `Guided · planning — press Tab when the plan is ready to hand off to build.` });
+    runTurn(t);
+  }
+
   /** Last answer in the transcript (the plan, when handing off). */
   function lastAnswerText(): string {
     for (let i = conv.entries.length - 1; i >= 0; i--) {
@@ -168,6 +191,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     const buildDef = resolveAgent("build");
     if (!buildDef) return;
     setAgentId("build");
+    // Advance the guided process to its build stage, if one is running.
+    setProc((p) => (p ? { ...p, stage: nextStageIndex(p.def, p.stage) ?? p.stage } : p));
     // Build continues the session after the handoff; later messages use continueChat.
     firstRef.current = false;
     cancelArmedRef.current = false;
@@ -239,6 +264,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         return;
       case "about":
         openInfoModal("About", aboutText().split("\n"));
+        return;
+      case "guided":
+        startGuided(cmd.task);
         return;
       case "unknown":
         dispatch({ type: "error", text: `Unknown command "/${cmd.cmd}". Try /help.` });
@@ -536,8 +564,12 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         ctxRatio={usage ? usage.ratio : null}
         note={
           agentId === "plan" && mode !== "running" && !modal && conv.entries.some((e) => e.kind === "answer")
-            ? "Tab → hand off to build"
-            : undefined
+            ? proc
+              ? "Guided · plan ✓ — Tab → build"
+              : "Tab → hand off to build"
+            : proc && agentId === "build"
+              ? "Guided · build"
+              : undefined
         }
       />
       {modal ? (
