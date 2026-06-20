@@ -43,7 +43,7 @@ Organised by layer under `src/`, no framework:
 - **`src/providers/`** — `Provider` interface, `OllamaProvider` (NDJSON stream + native `tools` + `supportsTools()` via `/api/show`), `OpenAICompatProvider`, factory.
 - **`src/tools/`** — one file per tool family (`bash`, `ssh` incl. upload/download, `git`, `fetch`, `filesystem` incl. read/write/edit/append/delete/download). `index.ts` exposes `getDefaultTools()`.
 - **`src/cli/`** — `commands/` (run, chat, agents, skills, models, check, config), `output.ts` (render routing: interactive TUI / one-shot Ink / plain — see `selectRenderMode`), `config.ts` (config + `toAgentConfig`), `contextBar.ts` (+ shared `CTX_*` thresholds), `chatCommands.ts` (slash-command parser + `matchCommands` autocomplete), `skillResolve.ts`. `menu.ts` remains for `shouldShowMenu` but the no-arg `iaa` now launches the persistent TUI.
-  - **`src/cli/tui/`** — the persistent opencode-style TUI (v0.4.0). `launch.ts` (`launchTui`/`launchHomeTui`, alternate-screen) renders `App.tsx`, which owns one `AgentRuntime` across turns (continueChat semantics). `state/conversation.ts` is the pure event→entry reducer (bounded streaming buffer, follow/paused scroll). `layout/` (Header, MessageLog, InputBox, StatusLine + pure `viewport.ts` windowing and `chrome.ts` text), `components/` (EntryView, ToolBlock + pure `toolFormat.ts`, CommandPalette), `theme.ts` (semantic palette, built-in themes), `hooks/useAgentEvents.ts` (per-handler `off()`, never `removeAllListeners`). `AgentView.tsx`/`StepView.tsx`/`Spinner.tsx` back the legacy one-shot `run` view.
+  - **`src/cli/tui/`** — the persistent TUI (v0.5.0), built on **`tuir`** (an Ink fork with real z-index `Modal` overlays + focus-trapping). `launch.ts` (`launchTui`/`launchHomeTui`; `preserveScreen` + `setMouseReporting`) renders `App.tsx`, which owns one `AgentRuntime` across turns (continueChat semantics) and two `useTextInput` fields (prompt + modal search). Deliberately **no `<Viewport>`** — a plain root box sized `rows-1` keeps output under the terminal height (avoids tuir's clear-every-frame flicker). `state/conversation.ts` is the pure event→entry reducer (bounded streaming buffer, line scroll offset, `reset`). `layout/flatten.ts` flattens entries to styled wrapped lines + `windowLines` (line-level scroll + `markdownLines`); `layout/` also has MessageLog (panel-coloured, borderless), InputBox, StatusLine, `chrome.ts`. `components/` has SelectModal (select + info variants), CommandPalette, SpinnerT, pure `select.ts`/`toolFormat.ts`. `theme.ts` (semantic palette, built-in + custom themes, backgrounds/bold), `about.ts`, `hooks/useAgentEvents.ts` (per-handler `off()`). `AgentView.tsx`/`StepView.tsx`/`Spinner.tsx` stay on **Ink** for the legacy one-shot `iaa run` view (separate render path).
 
 ## ReAct agent pattern
 
@@ -122,8 +122,7 @@ Rules for tools:
 - **num_predict**: 8192 — 7b models produce longer reasoning chains; don't lower this
 - **Context window**: capped at 24576 tokens (leaves ~8k headroom for output in a 32k model)
 - **Model checking**: `checkOllama()` validates both connectivity and model availability before any run
-- **No streaming**: responses are collected in full before parsing — keeps parser logic simple
-- The Ollama API at `/api/chat` uses `{"stream": false}` — do not change to streaming without updating the parser
+- **Streaming**: `/api/chat` is called with `{"stream": true}`. Content deltas are yielded as `chunk` events (rendered token-by-token in the TUI) and `tool_calls` are accumulated across the streamed chunks, then emitted on the final `done` chunk. The text-format parser only runs when no native `tool_calls` are present.
 
 ## Ollama model targeting
 

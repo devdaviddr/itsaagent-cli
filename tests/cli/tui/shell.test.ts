@@ -1,67 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { wrappedLines, entryHeight, windowEntries } from "../../../src/cli/tui/layout/viewport.js";
 import { headerText, statusHint } from "../../../src/cli/tui/layout/chrome.js";
 import { selectRenderMode } from "../../../src/cli/output.js";
-import {
-  conversationReducer,
-  initialConversation,
-  type ToolEntry,
-} from "../../../src/cli/tui/state/conversation.js";
-
-describe("viewport — line estimation", () => {
-  it("wraps long lines and counts newlines", () => {
-    expect(wrappedLines("hello", 80)).toBe(1);
-    expect(wrappedLines("a".repeat(160), 80)).toBe(2);
-    expect(wrappedLines("a\nb\nc", 80)).toBe(3);
-  });
-
-  it("entryHeight collapses tools by default and expands on demand", () => {
-    const base: ToolEntry = {
-      id: 1,
-      kind: "tool",
-      stepIndex: 1,
-      name: "read_file",
-      args: { path: "x.ts" },
-      status: "success",
-      result: { success: true, data: "line1\nline2\nline3" },
-      expanded: false,
-    };
-    expect(entryHeight(base, 80)).toBe(1);
-    expect(entryHeight({ ...base, expanded: true }, 80)).toBeGreaterThan(1);
-  });
-});
-
-describe("viewport — windowing", () => {
-  it("shows everything when it fits, with nothing hidden", () => {
-    const win = windowEntries([1, 1, 1], 10, 0);
-    expect(win.startIndex).toBe(0);
-    expect(win.endIndex).toBe(3);
-    expect(win.hiddenAbove).toBe(0);
-    expect(win.hiddenBelow).toBe(0);
-  });
-
-  it("anchors to the tail when content overflows", () => {
-    const heights = [1, 1, 1, 1, 1, 1, 1, 1]; // 8 lines
-    const win = windowEntries(heights, 3, 0);
-    expect(win.hiddenAbove).toBeGreaterThan(0);
-    expect(win.hiddenBelow).toBe(0);
-    expect(win.endIndex).toBe(8);
-  });
-
-  it("scrolling up reveals earlier entries and hides later ones", () => {
-    const heights = [1, 1, 1, 1, 1, 1, 1, 1];
-    const win = windowEntries(heights, 3, 4);
-    expect(win.hiddenAbove).toBeLessThan(windowEntries(heights, 3, 0).hiddenAbove);
-    expect(win.hiddenBelow).toBeGreaterThan(0);
-  });
-
-  it("clamps the offset so it cannot scroll past the top", () => {
-    const heights = [1, 1, 1, 1];
-    const win = windowEntries(heights, 2, 999);
-    expect(win.startIndex).toBe(0);
-    expect(win.hiddenAbove).toBe(0);
-  });
-});
+import { conversationReducer, initialConversation } from "../../../src/cli/tui/state/conversation.js";
 
 describe("chrome text", () => {
   it("formats the header", () => {

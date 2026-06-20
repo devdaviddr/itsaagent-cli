@@ -23,8 +23,8 @@ Built for developers who want an autonomous agent without a cloud subscription.
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
 - **13 built-in tools** — `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
-- **Persistent TUI** — run `iaa` (or `iaa chat`) for a full-screen, opencode-style terminal app: a scrollable message log, a fixed input box, a live context bar, collapsible/themed tool blocks, inline slash commands with `/`-autocomplete, and `Esc`-to-cancel
-- **Theming** — coherent, config-selectable colour themes (`default`, `mono`), switchable live with `/theme`
+- **Persistent TUI** — run `iaa` (or `iaa chat`) for a full-screen terminal app (built on `tuir`): line-by-line scrollback (keyboard + mouse), **token streaming**, markdown-styled answers, floating picker/info modals, inline `/`-autocomplete, and a live status bar
+- **Theming** — built-in colour themes (`default`, `mono`, `dracula`, `nord`, `gruvbox`) plus a fully user-defined `custom` theme (colours, backgrounds, bold weight) via config; switch live with `/theme`
 - **Scriptable one-shot** — `iaa run "task"` stays a one-shot command (pipe-friendly); add `-i` to open the same task in the persistent TUI
 - **Provider abstraction** — Ollama (default) or any OpenAI-compatible endpoint
 - **Context management** — 24 576-token window, oldest-first eviction with an in-context trim notice
@@ -82,30 +82,33 @@ iaa config           View or update persistent config
 
 ### Slash commands
 
-Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; `Tab` completes):
+Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; ↑/↓ to highlight, `Tab` completes, `↵` runs). Most commands open a floating picker/info modal:
 
 ```
-/agent <name>   switch agent (resets context)
-/agents         list available agents
-/model <name>   switch model (persists to config)
-/models         list available models
-/theme <name>   switch theme: default, mono (persists to config)
-/tools          list built-in tools
-/clear          reset the conversation
+/agent          switch agent — opens a picker (resets context)
+/model          switch model — opens a picker (persists)
+/theme          switch theme — opens a picker (persists)
+/tools          browse tools — pick one to read its parameters
+/about          version, licence, author
 /help           show available commands
+/clear          wipe the conversation
 /exit           leave the TUI
 ```
+
+(`/agents`, `/models`, `/theme <name>`, `/model <name>` etc. remain typeable for power users.)
 
 ### TUI keys
 
 ```
-↵            send the message in the input box
-PgUp / PgDn  scroll the transcript;  Esc returns to the latest (when idle)
-↑ / ↓ + ↵    focus and expand/collapse a tool block (when the input is empty)
-Ctrl+R       expand / collapse all tool blocks
-Esc          cancel the in-flight run (keeps the session open)
-Ctrl+C       quit (during a run: cancel, then quit on a second press)
+↵                send the message in the input box
+↑ / ↓            scroll the transcript one line
+Ctrl+U / Ctrl+D  scroll half a page
+mouse / trackpad scroll the transcript (wheel)
+Esc              jump to the latest (or cancel an in-flight run, or close a modal)
+Ctrl+C           quit (during a run: cancel, then quit on a second press)
 ```
+
+Inside a modal: type to filter, ↑/↓ to move, `↵` to choose, `Esc` to close.
 
 ### Flags
 
