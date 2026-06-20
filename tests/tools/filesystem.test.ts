@@ -218,6 +218,73 @@ describe("editFileTool", () => {
   });
 });
 
+describe("editFileTool — string mode (no line counting)", () => {
+  const EXPRESS = [
+    "const express = require('express');",
+    "const app = express();",
+    "const port = 3000;",
+    "",
+    "app.get('/', (req, res) => {",
+    "  res.send('Hello World!');",
+    "});",
+    "",
+    "app.listen(port, () => {",
+    "  console.log(`Example app listening`);",
+    "});",
+    "",
+  ].join("\n");
+
+  it("replaces an exact unique string without touching other lines (the Hello Emma bug)", async () => {
+    const path = join(TEST_DIR, "server.js");
+    await writeFile(path, EXPRESS, "utf-8");
+    const result = await editFileTool.execute({
+      path,
+      old_string: "res.send('Hello World!');",
+      new_string: "res.send('Hello Emma!');",
+    });
+    expect(result.success).toBe(true);
+    const after = await readFile(path, "utf-8");
+    expect(after).toContain("res.send('Hello Emma!');");
+    expect(after).not.toContain("Hello World"); // old text gone
+    expect(after).toContain("app.get('/', (req, res) => {"); // route opener intact
+    expect(after.match(/res\.send/g)?.length).toBe(1); // not duplicated — structure preserved
+  });
+
+  it("refuses (no change) when old_string is not found", async () => {
+    const path = join(TEST_DIR, "nf.js");
+    await writeFile(path, "const x = 1;\n", "utf-8");
+    const result = await editFileTool.execute({ path, old_string: "const y = 2;", new_string: "const y = 3;" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not found/i);
+    expect(await readFile(path, "utf-8")).toBe("const x = 1;\n"); // unchanged
+  });
+
+  it("refuses (no change) when old_string is ambiguous (appears more than once)", async () => {
+    const path = join(TEST_DIR, "amb.js");
+    await writeFile(path, "x = 1;\nx = 1;\n", "utf-8");
+    const result = await editFileTool.execute({ path, old_string: "x = 1;", new_string: "x = 2;" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/occurs 2 times|must be unique/i);
+    expect(await readFile(path, "utf-8")).toBe("x = 1;\nx = 1;\n"); // unchanged
+  });
+
+  it("treats $ in new_string literally (no regex replacement patterns)", async () => {
+    const path = join(TEST_DIR, "dollar.js");
+    await writeFile(path, "const price = OLD;\n", "utf-8");
+    const result = await editFileTool.execute({ path, old_string: "OLD", new_string: "'$5'" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("const price = '$5';\n");
+  });
+
+  it("deletes the matched text when new_string is empty", async () => {
+    const path = join(TEST_DIR, "rm.js");
+    await writeFile(path, "keep;\nremove me;\nkeep;\n", "utf-8");
+    const result = await editFileTool.execute({ path, old_string: "remove me;\n", new_string: "" });
+    expect(result.success).toBe(true);
+    expect(await readFile(path, "utf-8")).toBe("keep;\nkeep;\n");
+  });
+});
+
 describe("deleteFileTool", () => {
   it("deletes a file and reports size", async () => {
     const path = join(TEST_DIR, "gone.txt");

@@ -198,6 +198,33 @@ scenario("edit-file", "Edits an existing file's content", async (ctx) => {
   fileContains(ctx.dir, "config.txt", "host=localhost"); // other lines preserved
 });
 
+// 5b. Modify working code WITHOUT breaking it (the "Hello Emma" corruption).
+scenario("modify-code", "Changes code via a string edit without breaking structure", async (ctx) => {
+  const server = [
+    "const express = require('express');",
+    "const app = express();",
+    "const port = 3000;",
+    "",
+    "app.get('/', (req, res) => {",
+    "  res.send('Hello World!');",
+    "});",
+    "",
+    "app.listen(port, () => {",
+    "  console.log('listening');",
+    "});",
+    "",
+  ].join("\n");
+  writeFileSync(join(ctx.dir, "server.js"), server);
+  const { rt } = await ctx.runtime("build");
+  await rt.run("In server.js, change the response text from 'Hello World!' to 'Hello Emma!'. Change only that; leave the rest of the file working.");
+  const after = read(ctx.dir, "server.js");
+  contains(after, "Hello Emma", "server.js");
+  notContains(after, "Hello World", "server.js");
+  // Structure must be intact: route opener + listen present, response not duplicated.
+  if (!after.includes("app.get('/'") || !after.includes("app.listen(")) fail(`edit broke the file structure:\n${after}`);
+  if ((after.match(/res\.send/g) ?? []).length !== 1) fail(`res.send was duplicated/garbled — broken edit:\n${after}`);
+});
+
 // 6. Append to a file.
 scenario("append-file", "Appends to an existing file without losing content", async (ctx) => {
   writeFileSync(join(ctx.dir, "log.txt"), "first line\n");
