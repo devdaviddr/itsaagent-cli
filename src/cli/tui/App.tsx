@@ -7,7 +7,7 @@ import { getDefaultTools } from "../../tools/index.js";
 import { loadConfig, saveConfig } from "../config.js";
 import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCommand } from "../chatCommands.js";
 import { GUIDED_PROCESS, nextStageIndex, type ProcessDef } from "../../agent/Process.js";
-import { conversationReducer, initialConversation } from "./state/conversation.js";
+import { conversationReducer, initialConversation, lastAnswer } from "./state/conversation.js";
 import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
 import { resolveTheme, themeNames, type ThemeOverrides } from "./theme.js";
@@ -172,18 +172,9 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     runTurn(t);
   }
 
-  /** Last answer in the transcript (the plan, when handing off). */
-  function lastAnswerText(): string {
-    for (let i = conv.entries.length - 1; i >= 0; i--) {
-      const e = conv.entries[i];
-      if (e.kind === "answer") return e.text;
-    }
-    return "";
-  }
-
   /** Hand the plan agent's approach off to build (Tab in plan mode). */
   function handoffToBuild(): void {
-    const plan = lastAnswerText();
+    const plan = lastAnswer(conv.entries);
     if (!plan) {
       dispatch({ type: "notice", text: "Ask plan for an approach first, then press Tab to hand it to build." });
       return;

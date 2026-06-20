@@ -73,6 +73,19 @@ export function initialConversation(): ConversationState {
   return { entries: [], nextId: 1, live: "", following: true, scrollOffset: 0 };
 }
 
+/**
+ * The most recent answer in the transcript — the plan text used when handing
+ * off from `plan` to `build` (Tab in the TUI). Returns "" when there is none.
+ * Shared so the handoff capture path is testable without rendering the TUI.
+ */
+export function lastAnswer(entries: Entry[]): string {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.kind === "answer") return e.text;
+  }
+  return "";
+}
+
 export type ConvAction =
   | { type: "user"; text: string }
   | { type: "step"; index: number }

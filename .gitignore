@@ -31,3 +31,6 @@ Thumbs.db
 
 # Test output
 coverage/
+
+# E2E run reports (generated)
+tests/e2e/results/
