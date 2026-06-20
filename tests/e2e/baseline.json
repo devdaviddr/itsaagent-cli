@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-06-20T10:54:11.438Z",
+  "model": "qwen2.5-coder-7b-32k:latest",
+  "runsPerScenario": 1,
+  "scenarios": {
+    "simple-chat": {
+      "passRate": 1,
+      "avgTurns": 1,
+      "avgToolCalls": 0
+    },
+    "shell-command": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 1
+    },
+    "file-creation": {
+      "passRate": 1,
+      "avgTurns": 4,
+      "avgToolCalls": 2
+    },
+    "folder-creation": {
+      "passRate": 1,
+      "avgTurns": 6,
+      "avgToolCalls": 4
+    },
+    "edit-file": {
+      "passRate": 1,
+      "avgTurns": 5,
+      "avgToolCalls": 3
+    },
+    "modify-code": {
+      "passRate": 1,
+      "avgTurns": 4,
+      "avgToolCalls": 2
+    },
+    "append-file": {
+      "passRate": 1,
+      "avgTurns": 4,
+      "avgToolCalls": 2
+    },
+    "delete-file": {
+      "passRate": 1,
+      "avgTurns": 4,
+      "avgToolCalls": 2
+    },
+    "glob-search": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 1
+    },
+    "grep-search": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 1
+    },
+    "git-commit": {
+      "passRate": 0,
+      "avgTurns": 1,
+      "avgToolCalls": 0
+    },
+    "context-memory": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 1
+    },
+    "chat-memory": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 0
+    },
+    "session-isolation": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 0
+    },
+    "plan-readonly": {
+      "passRate": 1,
+      "avgTurns": 2,
+      "avgToolCalls": 1
+    },
+    "handoff-express": {
+      "passRate": 1,
+      "avgTurns": 8,
+      "avgToolCalls": 5
+    },
+    "guided-tui-handoff": {
+      "passRate": 0,
+      "avgTurns": 3,
+      "avgToolCalls": 1
+    },
+    "ask-user": {
+      "passRate": 1,
+      "avgTurns": 5,
+      "avgToolCalls": 3
+    },
+    "build-full-api": {
+      "passRate": 0.5,
+      "avgTurns": 5.5,
+      "avgToolCalls": 3
+    },
+    "build-complete-script": {
+      "passRate": 1,
+      "avgTurns": 3,
+      "avgToolCalls": 1
+    },
+    "make-folder": {
+      "passRate": 1,
+      "avgTurns": 4,
+      "avgToolCalls": 2
+    },
+    "project-in-subfolder": {
+      "passRate": 1,
+      "avgTurns": 9,
+      "avgToolCalls": 7
+    },
+    "fetch-url": {
+      "passRate": 0,
+      "avgTurns": 5,
+      "avgToolCalls": 4
+    }
+  }
+}
