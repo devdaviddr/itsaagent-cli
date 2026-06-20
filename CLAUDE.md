@@ -35,7 +35,7 @@ Organised by layer under `src/`, no framework:
 - **`src/index.ts`** — CLI entry point (commander). Loads config, registers commands, defines global flags. With no args in a TTY it launches the home menu (`src/cli/menu.ts`); otherwise it parses the command line.
 - **`src/agent/`** — the agent core:
   - `AgentRuntime.ts` — the ReAct loop (`run`, `continueChat`, private `runLoop`). Sends tools natively when the model supports them, reads `message.tool_calls`, falls back to `parseResponse()` otherwise. Owns loop detection, failure escalation, and `SessionLogger` integration. `cancel()` cooperatively stops an in-flight loop (checked at the step boundary and around the provider stream), emitting the `cancelled` event and resolving with a `[cancelled]` sentinel.
-  - `AgentDefinition.ts` / `AgentRegistry.ts` / `AgentLoader.ts` — built-in agents (build/plan/cli), the registry, and the markdown loader for user agents.
+  - `AgentDefinition.ts` / `AgentRegistry.ts` / `AgentLoader.ts` — built-in agents (`build` full-access, `plan` read-only), the registry, and the markdown loader for user agents. In the TUI, `plan` can hand its approach off to `build` via Tab (seeds build with the plan).
   - `SkillLoader.ts` / `frontmatter.ts` — markdown skill loading, `{{arg}}` interpolation, shared frontmatter parsing.
   - `ContextManager.ts` — append-only message store, token estimation (3.5 chars/token), oldest-first trim with an in-context eviction notice, `onEvict`/`onUsage` callbacks.
   - `promptBuilder.ts` — builds the system prompt (rules, permitted-tool descriptions, agent suffix, active skills).

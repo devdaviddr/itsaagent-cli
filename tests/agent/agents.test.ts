@@ -32,9 +32,9 @@ function withSingleToolCall(runtime: AgentRuntime, toolName: string) {
 }
 
 describe("AgentRegistry", () => {
-  it("registers the three built-in agents", () => {
+  it("registers the two built-in agents", () => {
     const registry = new AgentRegistry();
-    expect(registry.list().map((a) => a.id)).toEqual(["build", "plan", "cli"]);
+    expect(registry.list().map((a) => a.id)).toEqual(["build", "plan"]);
   });
 
   it("default agent is build", async () => {
@@ -43,9 +43,12 @@ describe("AgentRegistry", () => {
     expect(conf.agent?.id).toBe("build");
   });
 
-  it("--agent plan and --agent cli resolve correctly", async () => {
+  it("--agent plan resolves correctly", async () => {
     expect((await toAgentConfig(defaultConfig(), { agent: "plan" })).agent?.id).toBe("plan");
-    expect((await toAgentConfig(defaultConfig(), { agent: "cli" })).agent?.id).toBe("cli");
+  });
+
+  it("the removed cli agent no longer resolves", async () => {
+    await expect(toAgentConfig(defaultConfig(), { agent: "cli" })).rejects.toThrow(/Unknown agent/);
   });
 
   it("rejects an unknown agent id", async () => {
@@ -75,13 +78,13 @@ describe("Agent tool permissions", () => {
     expect(errors).toContain("Tool not permitted by active agent");
   });
 
-  it("cli agent blocks read_file with the permission error", async () => {
-    const cli = new AgentRegistry().get("cli")!;
-    const runtime = new AgentRuntime(makeConfig(cli));
-    withSingleToolCall(runtime, "read_file");
+  it("plan agent blocks write_file with the permission error", async () => {
+    const plan = new AgentRegistry().get("plan")!;
+    const runtime = new AgentRuntime(makeConfig(plan));
+    withSingleToolCall(runtime, "write_file");
     const errors: (string | undefined)[] = [];
     runtime.on("tool:result", ({ result }) => errors.push(result.error));
-    await runtime.run("read a file");
+    await runtime.run("write a file");
     expect(errors).toContain("Tool not permitted by active agent");
   });
 });
@@ -99,13 +102,6 @@ describe("Agent system prompt scoping", () => {
     expect(prompt).toContain("### read_file");
     expect(prompt).not.toContain("### bash");
     expect(prompt).toContain("## Plan Agent");
-  });
-
-  it("cli system prompt includes bash but omits read_file", () => {
-    const cli = new AgentRegistry().get("cli")!;
-    const prompt = systemPrompt(new AgentRuntime(makeConfig(cli)));
-    expect(prompt).toContain("### bash");
-    expect(prompt).not.toContain("### read_file");
   });
 
   it("build system prompt includes all tools", () => {

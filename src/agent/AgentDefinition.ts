@@ -45,7 +45,7 @@ export function agentPermitsTool(agent: AgentDefinition, toolName: string): bool
 }
 
 /** IDs reserved by built-in agents — user agents may not reuse them. */
-export const BUILTIN_AGENT_IDS: ReadonlySet<string> = new Set(["build", "plan", "cli"]);
+export const BUILTIN_AGENT_IDS: ReadonlySet<string> = new Set(["build", "plan"]);
 
 export const DEFAULT_AGENT_ID = "build";
 
@@ -73,22 +73,9 @@ export const BUILTIN_AGENTS: AgentDefinition[] = [
       "## Plan Agent",
       "You are in read-only planning mode. You cannot modify files, run shell",
       "commands, or connect to remote hosts. Your job is to read, analyse, and",
-      "explain. When the task requires changes, describe precisely what should",
-      "change and why — do not attempt to make the changes yourself.",
-    ].join("\n"),
-  },
-  {
-    id: "cli",
-    name: "CLI",
-    description: "Shell and infrastructure — commands, SSH, file transfer",
-    tools: ["bash", "ssh", "ssh_upload", "ssh_download", "fetch", "download_file"],
-    readonly: false,
-    systemPromptSuffix: [
-      "## CLI Agent",
-      "You are in shell and infrastructure mode. Focus on running commands,",
-      "managing remote hosts over SSH, and transferring files. You do not have",
-      "direct filesystem read/edit tools — use shell commands (cat, sed, etc.)",
-      "for file inspection and changes.",
+      "produce a clear, step-by-step approach for how the task should be done —",
+      "do not attempt to make the changes yourself. End with a concrete plan the",
+      "build agent can execute; the user can press Tab to hand it off to build.",
     ].join("\n"),
   },
 ];
