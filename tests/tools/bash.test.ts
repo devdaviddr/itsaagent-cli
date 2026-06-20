@@ -53,12 +53,24 @@ describe("bashTool cwd (fixes npm-writes-to-home)", () => {
     }
   });
 
-  it("persists the cwd to later calls (like cd)", async () => {
+  it("does NOT persist an explicit cwd (one-off, avoids compounding relative dirs)", async () => {
+    const before = getSessionCwd();
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "iaa-bashcwd-")));
     try {
       await bashTool.execute({ command: "true", cwd: dir });
+      expect(getSessionCwd()).toBe(before); // session cwd unchanged
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still persists a `cd` inside the command (no explicit cwd)", async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "iaa-bashcd-")));
+    try {
+      await bashTool.execute({ command: `cd ${dir}` });
       expect(getSessionCwd()).toBe(dir);
     } finally {
+      resetSessionCwd();
       rmSync(dir, { recursive: true, force: true });
     }
   });

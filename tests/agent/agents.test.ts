@@ -153,6 +153,14 @@ describe("Agent system prompt scoping", () => {
     expect(prompt).toMatch(/keep gathering information/i);
     expect(prompt).toMatch(/ask_user/);
   });
+
+  it("plan agent is told to write agent-executable plans, not human tutorials", () => {
+    const plan = new AgentRegistry().get("plan")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(plan)));
+    expect(prompt).toMatch(/FOR THE BUILD AGENT to execute with its TOOLS/);
+    expect(prompt).toMatch(/open Finder|Postman/); // forbids human-tutorial steps
+    expect(prompt).toContain("make_directory");
+  });
 });
 
 describe("Runtime agent/model switching (M-03)", () => {
