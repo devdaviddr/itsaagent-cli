@@ -64,14 +64,32 @@ describe("R-04 loop and failure recovery", () => {
     expect(ctxText(runtime)).toMatch(/failed twice in a row/);
   });
 
-  it("hard-aborts after three consecutive failures of the same tool", async () => {
+  it("injects a best-effort recovery turn after three consecutive failures (not a dead-end abort)", async () => {
     const runtime = new AgentRuntime(makeConfig());
     (runtime as unknown as { provider: unknown }).provider = scripted([
       tc("read_file", { path: "/no/such/a" }),
       tc("read_file", { path: "/no/such/b" }),
       tc("read_file", { path: "/no/such/c" }),
+      answer, // after the recovery nudge, the model gives a graceful answer
     ]);
     const result = await runtime.run("fail thrice");
+    expect(ctxText(runtime)).toMatch(/\[RECOVERY\]/);
+    expect(result).toBe("done"); // recovered to a real answer, not an abort message
+  });
+
+  it("still hard-aborts if failures continue after the one recovery turn", async () => {
+    const runtime = new AgentRuntime(makeConfig());
+    // Distinct args each time so the failure counter (not identical-call loop) drives it,
+    // and never an answer — so it must eventually give up after recovery is spent.
+    (runtime as unknown as { provider: unknown }).provider = scripted([
+      tc("read_file", { path: "/no/such/a" }),
+      tc("read_file", { path: "/no/such/b" }),
+      tc("read_file", { path: "/no/such/c" }), // → recovery turn (once)
+      tc("read_file", { path: "/no/such/d" }),
+      tc("read_file", { path: "/no/such/e" }),
+      tc("read_file", { path: "/no/such/f" }), // → hard abort this time
+    ]);
+    const result = await runtime.run("fail until exhausted");
     expect(result).toMatch(/failed 3 times consecutively/);
   });
 

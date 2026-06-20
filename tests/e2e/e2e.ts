@@ -15,6 +15,8 @@
  *   pnpm e2e -- --list              # list scenarios without running
  *   pnpm e2e -- --timeout 300       # per-run timeout in seconds (default 240)
  *   pnpm e2e -- --keep              # keep the scratch dir for inspection
+ *   pnpm e2e -- --update-baseline   # write tests/e2e/baseline.json from this run
+ *   pnpm e2e -- --compare           # diff pass-rate + avg turns vs baseline; non-zero exit on a regression
  *
  * Results are always written to tests/e2e/results/ as both JSON (machine) and
  * Markdown (human review), and the paths are printed at the end.
@@ -67,10 +69,25 @@ const RUNS = Math.max(1, Number(opt("runs", "1")));
 const TIMEOUT_MS = Number(opt("timeout", "240")) * 1000;
 const KEEP = flag("keep");
 const LIST = flag("list");
+const COMPARE = flag("compare");
+const UPDATE_BASELINE = flag("update-baseline");
 
 const REPO_ROOT = process.cwd();
 const SCRATCH_ROOT = join(os.tmpdir(), "iaa-e2e");
 const RESULTS_DIR = join(REPO_ROOT, "tests", "e2e", "results");
+const BASELINE_PATH = join(REPO_ROOT, "tests", "e2e", "baseline.json");
+
+/** Trajectory-quality metrics per run — so a short elegant solve and a long thrash don't score identically. */
+interface RunMetrics {
+  turns: number; // reasoning turns (step events) across all runtimes in the run
+  toolCalls: number;
+  toolErrors: number; // tool results with success === false
+  repeatedCalls: number; // identical (name,args) tool calls — wheel-spinning
+  asks: number; // ask_user clarifications
+}
+function newMetrics(): RunMetrics {
+  return { turns: 0, toolCalls: 0, toolErrors: 0, repeatedCalls: 0, asks: 0 };
+}
 
 // ---------------------------------------------------------------------------
 // Assertions / skip
@@ -496,6 +513,7 @@ interface RunResult {
   ok: boolean;
   ms: number;
   err?: string;
+  metrics?: RunMetrics;
 }
 interface ScenarioResult {
   name: string;
@@ -522,7 +540,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-async function buildCtx(dir: string, model: string, registry: AgentRegistry): Promise<Ctx> {
+async function buildCtx(dir: string, model: string, registry: AgentRegistry, metrics: RunMetrics): Promise<Ctx> {
+  // Shared across every runtime created in this run, so repeated-call detection
+  // and turn/tool counts aggregate over plan→build handoffs and multi-runtime scenarios.
+  const seenCalls = new Set<string>();
   return {
     dir,
     env: process.env,
@@ -537,8 +558,16 @@ async function buildCtx(dir: string, model: string, registry: AgentRegistry): Pr
       const rt = new AgentRuntime(agentConfig);
       const toolsUsed: string[] = [];
       const asks: string[] = [];
-      rt.on("tool:call", ({ name }) => toolsUsed.push(name));
-      rt.on("ask", ({ question }) => asks.push(question));
+      rt.on("step", () => { metrics.turns++; });
+      rt.on("tool:call", ({ name, args }) => {
+        toolsUsed.push(name);
+        metrics.toolCalls++;
+        const key = `${name}:${JSON.stringify(args ?? {})}`;
+        if (seenCalls.has(key)) metrics.repeatedCalls++;
+        else seenCalls.add(key);
+      });
+      rt.on("tool:result", ({ result }) => { if (!result.success) metrics.toolErrors++; });
+      rt.on("ask", ({ question }) => { asks.push(question); metrics.asks++; });
       return { rt, toolsUsed, asks };
     },
   };
@@ -547,6 +576,33 @@ async function buildCtx(dir: string, model: string, registry: AgentRegistry): Pr
 function ts(d: Date): string {
   const p = (n: number): string => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+/** Average a metric across the runs that recorded one. */
+function avgOf(runs: RunResult[], sel: (m: RunMetrics) => number): number {
+  const withM = runs.filter((r) => r.metrics);
+  if (!withM.length) return 0;
+  return withM.reduce((a, r) => a + sel(r.metrics as RunMetrics), 0) / withM.length;
+}
+
+interface ScenarioStat {
+  passRate: number;
+  avgTurns: number;
+  avgToolCalls: number;
+}
+/** Per-scenario stats for the baseline (pass-rate + trajectory efficiency). */
+function scenarioStats(results: ScenarioResult[]): Record<string, ScenarioStat> {
+  const out: Record<string, ScenarioStat> = {};
+  for (const r of results) {
+    if (r.status === "skip") continue;
+    const passes = r.runs.filter((x) => x.ok).length;
+    out[r.name] = {
+      passRate: r.runs.length ? Number((passes / r.runs.length).toFixed(3)) : 0,
+      avgTurns: Number(avgOf(r.runs, (m) => m.turns).toFixed(1)),
+      avgToolCalls: Number(avgOf(r.runs, (m) => m.toolCalls).toFixed(1)),
+    };
+  }
+  return out;
 }
 
 function writeResults(payload: {
@@ -584,13 +640,15 @@ function writeResults(payload: {
   lines.push("");
   lines.push(`**Summary:** ${counts.pass} passed · ${counts.flaky} flaky · ${counts.fail} failed · ${counts.skip} skipped (of ${payload.results.length})`);
   lines.push("");
-  lines.push(`| | Scenario | Status | Pass rate | Avg time | Notes |`);
-  lines.push(`|---|---|---|---|---|---|`);
+  lines.push(`| | Scenario | Status | Pass rate | Avg time | Turns | Tools | Notes |`);
+  lines.push(`|---|---|---|---|---|---|---|---|`);
   for (const r of payload.results) {
     const done = r.runs.filter((x) => x.ms > 0);
     const avg = done.length ? (done.reduce((a, x) => a + x.ms, 0) / done.length / 1000).toFixed(1) + "s" : "—";
+    const turns = r.status === "skip" ? "—" : avgOf(r.runs, (m) => m.turns).toFixed(0);
+    const toolsAvg = r.status === "skip" ? "—" : `${avgOf(r.runs, (m) => m.toolCalls).toFixed(0)}${avgOf(r.runs, (m) => m.toolErrors) >= 0.5 ? `/${avgOf(r.runs, (m) => m.toolErrors).toFixed(0)}e` : ""}`;
     const note = r.status === "skip" ? r.skipReason ?? "" : r.runs.find((x) => !x.ok)?.err ?? "";
-    lines.push(`| ${icon(r.status)} | \`${r.name}\` | ${r.status} | ${r.passRate} | ${avg} | ${truncate(note, 120).replace(/\|/g, "/")} |`);
+    lines.push(`| ${icon(r.status)} | \`${r.name}\` | ${r.status} | ${r.passRate} | ${avg} | ${turns} | ${toolsAvg} | ${truncate(note, 120).replace(/\|/g, "/")} |`);
   }
   lines.push("");
   lines.push(`> ${payload.results.length} scenarios. Generated by \`pnpm e2e\`.`);
@@ -680,22 +738,23 @@ async function main(): Promise<void> {
       process.chdir(dir);
       setSessionCwd(dir);
       const start = Date.now();
+      const metrics = newMetrics();
       try {
-        const ctx = await buildCtx(dir, model, registry);
+        const ctx = await buildCtx(dir, model, registry, metrics);
         await withTimeout(s.run(ctx), TIMEOUT_MS);
-        runs.push({ ok: true, ms: Date.now() - start });
+        runs.push({ ok: true, ms: Date.now() - start, metrics });
       } catch (err) {
         if (err instanceof SkipError) {
           skipReason = err.message;
           break;
         }
-        runs.push({ ok: false, ms: Date.now() - start, err: err instanceof Error ? err.message : String(err) });
+        runs.push({ ok: false, ms: Date.now() - start, err: err instanceof Error ? err.message : String(err), metrics });
       } finally {
         process.chdir(REPO_ROOT);
       }
       const last = runs[runs.length - 1];
       if (RUNS > 1) {
-        process.stdout.write(`    ${last.ok ? C.green(`run ${attempt} ✓`) : C.red(`run ${attempt} ✗ ${truncate(last.err ?? "", 80)}`)}\n`);
+        process.stdout.write(`    ${last.ok ? C.green(`run ${attempt} ✓`) : C.red(`run ${attempt} ✗ ${truncate(last.err ?? "", 80)}`)} ${C.dim(`[${metrics.turns} turns, ${metrics.toolCalls} tools, ${metrics.toolErrors} err]`)}\n`);
       } else if (attempt > 1) {
         process.stdout.write(`    ${C.yellow(`retried after a flake → ${last.ok ? "passed" : "failed again"}`)}\n`);
       }
@@ -717,7 +776,8 @@ async function main(): Promise<void> {
     const tag =
       status === "pass" ? C.green("✓ PASS") : status === "flaky" ? C.yellow("~ FLAKY") : status === "skip" ? C.dim("⏭ SKIP") : C.red("✗ FAIL");
     const ms = runs.reduce((a, r) => a + r.ms, 0);
-    process.stdout.write(`  ${tag} ${C.dim(`${passRate !== "—" ? passRate + "  " : ""}(${(ms / 1000).toFixed(1)}s)`)}\n`);
+    const traj = status === "skip" ? "" : `, ${avgOf(runs, (m) => m.turns).toFixed(0)} turns, ${avgOf(runs, (m) => m.toolCalls).toFixed(0)} tools`;
+    process.stdout.write(`  ${tag} ${C.dim(`${passRate !== "—" ? passRate + "  " : ""}(${(ms / 1000).toFixed(1)}s${traj})`)}\n`);
     if (status === "skip") process.stdout.write(`  ${C.dim("└ " + skipReason)}\n`);
     else if (status !== "pass") process.stdout.write(`  ${C.red("└ " + (runs.find((r) => !r.ok)?.err ?? ""))}\n`);
     process.stdout.write("\n");
@@ -746,9 +806,43 @@ async function main(): Promise<void> {
   console.log(`${C.dim("results")}  ${paths.md}`);
   console.log(`${C.dim("       ")}  ${paths.json}`);
   if (KEEP) console.log(C.dim(`scratch  ${SCRATCH_ROOT}`));
+
+  // --- Baseline: update and/or compare (trajectory regression guardrail) ---
+  const stats = scenarioStats(results);
+  let regressed = false;
+  if (UPDATE_BASELINE) {
+    writeFileSync(BASELINE_PATH, JSON.stringify({ generatedAt: finishedAt, model, runsPerScenario: RUNS, scenarios: stats }, null, 2) + "\n");
+    console.log(C.dim(`baseline  updated → ${BASELINE_PATH}`));
+  }
+  if (COMPARE) {
+    if (!existsSync(BASELINE_PATH)) {
+      console.log(C.yellow(`\nNo baseline to compare against. Run with --update-baseline first.`));
+    } else {
+      const base = JSON.parse(readFileSync(BASELINE_PATH, "utf-8")) as { model: string; scenarios: Record<string, ScenarioStat> };
+      console.log(C.bold(`\nvs baseline (${base.model}):`));
+      for (const [name, cur] of Object.entries(stats)) {
+        const b = base.scenarios[name];
+        if (!b) {
+          console.log(`  ${C.dim("•")} ${name}: ${C.dim("new (no baseline)")}`);
+          continue;
+        }
+        const passDrop = b.passRate - cur.passRate;
+        const turnsRise = cur.avgTurns - b.avgTurns;
+        if (passDrop > 0.001) {
+          regressed = true;
+          console.log(`  ${C.red("▼")} ${name}: pass-rate ${b.passRate} → ${C.red(String(cur.passRate))}`);
+        } else if (turnsRise > Math.max(3, b.avgTurns * 0.5)) {
+          console.log(`  ${C.yellow("≈")} ${name}: ${C.yellow("slower")} ${b.avgTurns} → ${cur.avgTurns} turns (pass-rate held at ${cur.passRate})`);
+        } else {
+          console.log(`  ${C.green("✓")} ${name}: ${C.dim(`${cur.passRate} pass, ${cur.avgTurns} turns`)}`);
+        }
+      }
+      if (regressed) console.log(C.red(`\nREGRESSION: at least one scenario's pass-rate dropped vs baseline.`));
+    }
+  }
   console.log("");
 
-  process.exitCode = failed > 0 ? 1 : 0;
+  process.exitCode = failed > 0 || regressed ? 1 : 0;
 }
 
 main().catch((err) => {

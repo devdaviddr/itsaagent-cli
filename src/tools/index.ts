@@ -15,6 +15,7 @@ import { sshTool, sshUploadTool, sshDownloadTool } from "./ssh.js";
 import { gitTool } from "./git.js";
 import { fetchTool } from "./fetch.js";
 import { askUserTool } from "./ask.js";
+import { runTestsTool } from "./verify.js";
 
 export function getDefaultTools(): Tool[] {
   return [
@@ -34,6 +35,7 @@ export function getDefaultTools(): Tool[] {
     downloadFileTool,
     globTool,
     grepTool,
+    runTestsTool,
   ];
 }
 
@@ -54,3 +56,4 @@ export {
 } from "./filesystem.js";
 export { sshTool } from "./ssh.js";
 export { askUserTool } from "./ask.js";
+export { runTestsTool } from "./verify.js";
