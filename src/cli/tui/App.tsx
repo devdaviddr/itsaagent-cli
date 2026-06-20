@@ -303,8 +303,12 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const contentWidth = Math.max(20, dims.cols - 3);
   const matches = matchCommands(value);
   const paletteOpen = !modal && mode !== "running" && matches.length > 0;
+  // Keep the whole frame one line short of the terminal: when an Ink frame fills
+  // the full height it can no longer diff in place and repaints everything each
+  // update, which flickers. One spare line lets it patch incrementally.
+  const appHeight = Math.max(8, dims.rows - 1);
   // Reserve rows for the input panel (3), hint + status bar (2), and any open palette.
-  const logRows = Math.max(3, dims.rows - 6 - (paletteOpen ? matches.length : 0));
+  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
   const heights = conv.entries.map((e) => entryHeight(e, contentWidth));
   const win = windowEntries(heights, logRows, conv.scrollOffset);
   const visible = conv.entries.slice(win.startIndex, win.endIndex);
@@ -423,7 +427,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const centered = Boolean(modal) || isEmpty;
 
   return (
-    <Box flexDirection="column" paddingX={1} height={dims.rows}>
+    <Box flexDirection="column" paddingX={1} height={appHeight}>
       <Box
         flexGrow={1}
         flexDirection="column"
