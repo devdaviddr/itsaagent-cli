@@ -40,6 +40,14 @@ export interface CliConfig {
   fewShot?: boolean;
   /** Auto-load the nearest AGENTS.md into the system prompt (default true). */
   projectContext?: boolean;
+  /**
+   * Context compaction as the window fills: "structured" (default, deterministic
+   * — shrink old tool results, drop superseded reads), "summarize" (also folds
+   * older turns via a local-model call), or "off" (evict only at 100%).
+   */
+  compaction?: "off" | "structured" | "summarize";
+  /** Window fraction (0–1) at which compaction kicks in (default 0.8). */
+  compactionThreshold?: number;
   /** Override sampling temperature (default: per-model profile, ~0.15). */
   temperature?: number;
   /** Override max tokens generated per turn (default: per-model profile, 8192). */
@@ -114,5 +122,7 @@ export async function toAgentConfig(
     agent,
     fewShot: conf.fewShot,
     projectContext: conf.projectContext,
+    compaction: conf.compaction ?? "structured",
+    compactionThreshold: conf.compactionThreshold ?? 0.8,
   };
 }
