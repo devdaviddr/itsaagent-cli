@@ -61,6 +61,7 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `12. Commands run non-interactively with no stdin. Never use interactive commands (read, prompts, passwd, editors like vi/nano). If input is needed, pass it as flags or via a here-string`,
     `13. CRITICAL: To perform any real action — create, write, edit, append, or delete a file; run a command; transfer files — you MUST emit a <tool_call>. NEVER claim an action happened (e.g. "File created successfully", "Done", "I've written the file") unless a tool call actually returned a successful [TOOL RESULT]. Do not fabricate results or success messages. If you have not yet called the tool, call it now instead of answering`,
     `14. To create or overwrite a file, call write_file with both "path" and "content" (use an empty string for an empty file) — do not use read_file on a path you intend to create`,
+    `15. If the request is ambiguous, or you need information only the user has (a name, a choice, a value), call ask_user with one specific question instead of guessing`,
   ].join("\n");
 
   let prompt = agentSuffix ? `${base}\n\n${agentSuffix}` : base;

@@ -24,6 +24,7 @@ export interface AgentRuntimeEvents {
   "context:evict": [payload: { evicted: number; ratio: number }];
   "context:usage": [payload: { used: number; max: number; ratio: number }];
   cancelled: [payload: { stepIndex?: number }];
+  ask: [payload: { question: string }];
 }
 
 function formatToolResult(tool: string, args: Record<string, unknown>, result: ToolResult): string {
@@ -49,6 +50,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private running = false;
   /** Set by cancel() to stop the loop cooperatively at the next checkpoint. */
   private cancelled = false;
+  /** Interactive handler for the ask_user tool (provided by the TUI). */
+  private askUserHandler?: (question: string) => Promise<string>;
 
   constructor(config: AgentConfig) {
     super();
@@ -117,8 +120,14 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.toolUseMode = undefined;
   }
 
+  /** Register the interactive ask_user handler (resolves with the user's answer). */
+  setAskUserHandler(fn: ((question: string) => Promise<string>) | undefined): void {
+    this.askUserHandler = fn;
+  }
+
   /** True if the active agent permits calling the named tool. */
   private isToolPermitted(name: string): boolean {
+    if (name === "ask_user") return true; // clarification is allowed for every agent
     if (!this.agent) return true; // no agent = unrestricted (back-compat)
     return agentPermitsTool(this.agent, name);
   }
@@ -149,6 +158,20 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   }
 
   private async executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    // ask_user can't be answered locally — route it to the interactive handler.
+    if (name === "ask_user") {
+      const question = String(args.question ?? "");
+      this.session.recordTool("ask_user", args);
+      this.emit("ask", { question });
+      if (!this.askUserHandler) {
+        return {
+          success: true,
+          data: "(No interactive user is available. Proceed with reasonable assumptions and state them explicitly.)",
+        };
+      }
+      const answer = await this.askUserHandler(question);
+      return { success: true, data: answer };
+    }
     if (!this.isToolPermitted(name)) {
       const readonlyMutation = this.agent?.readonly === true && MUTATION_TOOLS.has(name);
       const error = readonlyMutation
