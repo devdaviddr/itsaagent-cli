@@ -110,6 +110,26 @@ describe("Agent system prompt scoping", () => {
     expect(prompt).toContain("### bash");
     expect(prompt).toContain("### read_file");
   });
+
+  it("build agent has a general plan-first, build-the-whole-thing contract", () => {
+    const build = new AgentRegistry().get("build")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(build)));
+    expect(prompt).toContain("## Build Agent");
+    expect(prompt).toMatch(/plan first/i); // plans before acting when not handed a plan
+    expect(prompt).toMatch(/ask_user/); // gathers missing info instead of guessing
+    expect(prompt).toMatch(/build the whole thing/i);
+    expect(prompt).toMatch(/do not stop at the first successful step/i);
+    // Stays general — must NOT hardcode a specific stack like express.
+    expect(prompt.toLowerCase()).not.toContain("express");
+  });
+
+  it("plan agent keeps gathering info until it can plan correctly", () => {
+    const plan = new AgentRegistry().get("plan")!;
+    const prompt = systemPrompt(new AgentRuntime(makeConfig(plan)));
+    expect(prompt).toContain("## Plan Agent");
+    expect(prompt).toMatch(/keep gathering information/i);
+    expect(prompt).toMatch(/ask_user/);
+  });
 });
 
 describe("Runtime agent/model switching (M-03)", () => {

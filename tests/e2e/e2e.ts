@@ -356,7 +356,45 @@ scenario("ask-user", "Asks the user for missing info and uses the answer", async
   if (!toolsUsed.includes("ask_user") && asks.length === 0) fail("expected the agent to call ask_user for the filename");
 });
 
-// 18. fetch — GATED on network.
+// 18. Build agent completes a multi-step task in ONE run (no staggered stops).
+scenario("build-full-api", "Build agent codes a full Express API in one run", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  await rt.run(
+    "Set up an Express API in the current directory: create a package.json declaring express as a dependency and a " +
+      "complete index.js with a server and a GET /hello endpoint that returns 'hello world'. Do not run npm install.",
+  );
+  // package.json with express, and a non-empty server that defines BOTH the
+  // server and the route — i.e. it didn't just `touch` an empty file or stop early.
+  fileContains(ctx.dir, "package.json", "express");
+  const jsFiles = listFiles(ctx.dir).filter((f) => f.endsWith(".js"));
+  if (jsFiles.length === 0) fail(`expected a server .js file, found: ${listFiles(ctx.dir).join(", ") || "nothing"}`);
+  const server = jsFiles.map((f) => read(ctx.dir, f)).join("\n");
+  if (server.trim().length < 40) fail(`server file is basically empty (staggered/incomplete build): ${truncate(server, 80)}`);
+  const lc = server.toLowerCase();
+  if (!lc.includes("express")) fail("server should use express");
+  if (!lc.includes("listen")) fail("server should call .listen()");
+  if (!lc.includes("/hello")) fail("server should define the /hello route");
+});
+
+// 19. Completeness generalises beyond web APIs — a CLI script with edge cases,
+//     built fully in one run (proves the build agent isn't express-specific).
+scenario("build-complete-script", "Build agent ships a complete CLI script in one run", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  await rt.run(
+    "Create a complete Node.js script named greet.js that reads a name from the first command-line argument and prints " +
+      "'Hello, <name>!'. If no name is given, print a usage message instead. Write the full working script. Do not run it.",
+  );
+  fileExists(ctx.dir, "greet.js");
+  const src = read(ctx.dir, "greet.js");
+  if (src.trim().length < 40) fail(`greet.js is basically empty (incomplete build): ${truncate(src, 80)}`);
+  const lc = src.toLowerCase();
+  if (!lc.includes("argv")) fail("script should read a command-line argument (process.argv)");
+  if (!lc.includes("hello")) fail("script should print the greeting");
+  // The edge case was handled too — not just the happy path / first win.
+  if (!/usage/i.test(src)) fail("script should handle the no-argument case with a usage message");
+});
+
+// 20. fetch — GATED on network.
 scenario("fetch-url", "Fetches a URL and reports its content (needs network)", async (ctx) => {
   let online = false;
   try {
@@ -374,7 +412,7 @@ scenario("fetch-url", "Fetches a URL and reports its content (needs network)", a
   contains(answer, "example");
 });
 
-// 19. ssh — GATED on IAA_E2E_SSH_HOST (or a reachable localhost sshd).
+// 21. ssh — GATED on IAA_E2E_SSH_HOST (or a reachable localhost sshd).
 scenario("ssh-roundtrip", "Runs a command on a host over SSH (needs IAA_E2E_SSH_HOST)", async (ctx) => {
   const host = ctx.env.IAA_E2E_SSH_HOST;
   const user = ctx.env.IAA_E2E_SSH_USER ?? os.userInfo().username;
