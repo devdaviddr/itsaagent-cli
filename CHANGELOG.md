@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **End-to-end test suite** (`pnpm e2e`, `tests/e2e/`) — drives the real agent runtime against a live Ollama model and asserts on real effects: simple chat, shell commands, file/folder creation, within-run context memory, across-turn chat memory, session isolation, the read-only `plan` agent, the **plan → build handoff building an Express API**, and `ask_user` clarification. Each scenario runs in a sandboxed temp dir; `--only`, `--model`, `--retries`, `--keep`, and `--list` flags supported. Complements the fast Vitest unit suite (`pnpm test`).
+
 ---
 
 ## [0.6.0] — 2026-06-20

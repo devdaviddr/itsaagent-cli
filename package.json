@@ -20,7 +20,8 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "tsx tests/e2e/e2e.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.5.1",
