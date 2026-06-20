@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Build agent reliability: added system-prompt rules so the model must emit a `<tool_call>` to perform any real action and must never claim success ("File created successfully") without a tool returning a result. Small local models (e.g. `qwen2.5-coder:7b`) were sometimes hallucinating completion instead of calling `write_file`/`bash`. The removed `cli` agent masked this because its smaller, focused tool set made the model commit to a shell call.
+
 ---
 
 ## [0.5.1] — 2026-06-20

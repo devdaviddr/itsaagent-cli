@@ -44,3 +44,13 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("## Plan Agent");
   });
 });
+
+import { describe as describe2, it as it2, expect as expect2 } from "vitest";
+import { buildSystemPrompt as bsp } from "../../src/agent/promptBuilder.js";
+describe2("anti-hallucination rule", () => {
+  it2("instructs the model never to claim success without a tool result", () => {
+    const p = bsp([], "/tmp");
+    expect2(p).toContain("NEVER claim");
+    expect2(p).toMatch(/must emit a <tool_call>/i);
+  });
+});
