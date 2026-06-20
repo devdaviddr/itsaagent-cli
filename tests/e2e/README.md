@@ -29,7 +29,22 @@ pnpm e2e -- --model mistral:7b  # override the model
 pnpm e2e -- --list              # list scenarios without running
 pnpm e2e -- --timeout 300       # per-run timeout in seconds (default 240)
 pnpm e2e -- --keep              # keep the scratch dir for inspection
+pnpm e2e -- --update-baseline   # write tests/e2e/baseline.json from this run
+pnpm e2e -- --compare           # diff pass-rate + avg turns vs baseline (non-zero exit on regression)
 ```
+
+### Trajectory scoring & regression baseline
+
+Every run now records per-scenario **trajectory metrics** — reasoning turns,
+tool calls, tool errors, repeated (wheel-spinning) calls, and clarifications —
+so a short elegant solve and a long thrash no longer score identically. The
+Markdown report shows `Turns` and `Tools` (with an `…e` error suffix) columns.
+
+`tests/e2e/baseline.json` (committed) is the reference. `--update-baseline`
+rewrites it from the current run; `--compare` diffs the current run against it
+and **exits non-zero if any scenario's pass-rate dropped** (and warns when a
+scenario gets materially slower at the same pass-rate). Use `--runs N` for a
+stable baseline, e.g. `pnpm e2e -- --runs 5 --update-baseline`.
 
 Exit code is non-zero if any scenario **fails**, so it is CI-friendly. A
 `skip` or `flaky` does not fail the suite.
