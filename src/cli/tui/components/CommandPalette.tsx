@@ -18,15 +18,7 @@ export function CommandPalette({ matches, theme, width, index }: CommandPaletteP
   // highlight bar inside that so it doesn't wrap a fragment onto the next line.
   const barWidth = Math.max(10, width - 2);
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={theme.accent}
-      borderTop={false}
-      borderRight={false}
-      borderBottom={false}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column" paddingLeft={1}>
       {matches.map((c, i) => {
         const label = `/${c.name}${c.arg ? ` ${c.arg}` : ""}`;
         if (i === index) {

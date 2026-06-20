@@ -27,15 +27,7 @@ interface InputBoxProps {
  */
 export function InputBox({ theme, agent, model, onChange, value, onSubmit, onUpArrow, onDownArrow, running, providerOk }: InputBoxProps) {
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={theme.accent}
-      borderTop={false}
-      borderRight={false}
-      borderBottom={false}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column" paddingLeft={1}>
       <Box>
         {running ? (
           <>
