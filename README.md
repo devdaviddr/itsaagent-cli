@@ -19,9 +19,11 @@ Built for developers who want an autonomous agent without a cloud subscription.
 
 - **ReAct loop** — Thought → Action → Observation, repeated until done or the step limit is reached
 - **Native tool calling** — uses Ollama's function-calling API for capable models, with a text parser as automatic fallback
+- **Sessions** — every chat runs inside a `Session` that owns its context, agent, model, and working directory; agent hand-offs happen *within* a session, so exploration and context carry across them
 - **Built-in agents** — `build` (full access) and `plan` (read-only analysis); each scopes which tools the model may call. In the TUI, `plan` produces an approach you can hand off to `build` by pressing **Tab**
+- **Guided process** — `/guided <task>` plans the work, asks you to clarify any ambiguities (`ask_user`), then hands the approach to `build` on **Tab**; the plan agent carries a compact "already explored" summary across the hand-off
 - **User-defined agents & skills** — drop a markdown file in `~/.config/ai-cli/agents/` or `skills/` to add a persona or a reusable workflow
-- **13 built-in tools** — `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
+- **15 built-in tools** — `ask_user`, `bash`, `ssh`, `ssh_upload`, `ssh_download`, `git`, `fetch`, `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`, `glob`, `grep`
 - **SSH + Wake-on-LAN** — runs commands and transfers files over SSH; auto-wakes sleeping machines before retrying
 - **Persistent TUI** — run `iaa` (or `iaa chat`) for a full-screen terminal app (built on `tuir`): line-by-line scrollback (keyboard + mouse), **token streaming**, markdown-styled answers, floating picker/info modals, inline `/`-autocomplete, and a live status bar
 - **Theming** — built-in colour themes (`default`, `mono`, `dracula`, `nord`, `gruvbox`) plus a fully user-defined `custom` theme (colours, backgrounds, bold weight) via config; switch live with `/theme`
@@ -88,6 +90,7 @@ Typed inside the TUI input box (a `/`-autocomplete popup appears as you type; �
 /agent          switch agent — opens a picker (resets context)
 /model          switch model — opens a picker (persists)
 /theme          switch theme — opens a picker (persists)
+/guided <task>  plan a task (clarify ambiguities), then Tab → hand off to build
 /tools          browse tools — pick one to read its parameters
 /about          version, licence, author
 /help           show available commands
