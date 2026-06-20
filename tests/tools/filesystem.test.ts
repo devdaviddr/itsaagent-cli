@@ -313,3 +313,34 @@ describe("grepTool", () => {
     expect(result.data).not.toContain("skip.md");
   });
 });
+
+import { homedir } from "node:os";
+import { expandHome } from "../../src/tools/filesystem.js";
+
+describe("tilde (~) home expansion", () => {
+  it("expandHome resolves a leading ~ to the home directory", () => {
+    expect(expandHome("~")).toBe(homedir());
+    expect(expandHome("~/Desktop/x.txt")).toBe(join(homedir(), "Desktop/x.txt"));
+    // No expansion when ~ isn't a leading path segment.
+    expect(expandHome("/abs/path")).toBe("/abs/path");
+    expect(expandHome("rel/path")).toBe("rel/path");
+    expect(expandHome("~user/x")).toBe("~user/x");
+  });
+
+  it("write_file + read_file honour ~ (writes under home, not <cwd>/~)", async () => {
+    const dir = ".iaa-tilde-test-" + Math.floor(Date.now()).toString(36);
+    const tildePath = `~/${dir}/note.txt`;
+    const realPath = join(homedir(), dir, "note.txt");
+    try {
+      const w = await writeFileTool.execute({ path: tildePath, content: "on desktop" });
+      expect(w.success).toBe(true);
+      // The file exists at the REAL home-relative path, not a literal "~" folder.
+      expect((await stat(realPath)).isFile()).toBe(true);
+      const r = await readFileTool.execute({ path: tildePath });
+      expect(r.success).toBe(true);
+      expect(r.data).toContain("on desktop");
+    } finally {
+      await rm(join(homedir(), dir), { recursive: true, force: true });
+    }
+  });
+});

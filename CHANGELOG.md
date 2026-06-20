@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- File tools (`read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `download_file`) now expand a leading `~` to the home directory. Previously `~/Desktop/x` was written to `<cwd>/~/Desktop/x` (a literal `~` folder), so the `build` agent appeared to "fail" to write to the Desktop while the `cli` agent (using `bash`, which the shell expands) worked. Both now behave the same.
+
 ---
 
 ## [0.5.0] — 2026-06-20

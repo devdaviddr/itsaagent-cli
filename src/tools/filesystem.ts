@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir, stat, appendFile, unlink, rmdir, realpath } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, resolve, sep, join } from "node:path";
+import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
@@ -9,6 +10,18 @@ import fg from "fast-glob";
 import type { Tool, ToolResult } from "../types.js";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Expand a leading `~` to the user's home directory. The shell does this (so the
+ * `bash` tool already handles `~/Desktop/…`), but Node's `fs`/`path` treat `~`
+ * as a literal folder name — so file tools must expand it themselves, otherwise
+ * `~/Desktop/x` is written to `<cwd>/~/Desktop/x`.
+ */
+export function expandHome(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith(`~/`) || p.startsWith(`~${sep}`)) return join(homedir(), p.slice(2));
+  return p;
+}
 
 /** Files larger than this must be read with a line range, not whole. */
 const READ_FILE_MAX_BYTES = 150 * 1024;
@@ -57,7 +70,7 @@ export const readFileTool: Tool = {
     },
   },
   async execute(args): Promise<ToolResult> {
-    const path = String(args.path ?? "");
+    const path = expandHome(String(args.path ?? ""));
     const hasStart = args.start_line !== undefined && args.start_line !== null;
     const hasEnd = args.end_line !== undefined && args.end_line !== null;
     try {
@@ -114,7 +127,7 @@ export const writeFileTool: Tool = {
     },
   },
   async execute(args): Promise<ToolResult> {
-    const path = String(args.path ?? "");
+    const path = expandHome(String(args.path ?? ""));
     const content = String(args.content ?? "");
     try {
       await mkdir(dirname(path), { recursive: true });
@@ -140,7 +153,7 @@ export const appendFileTool: Tool = {
     },
   },
   async execute(args): Promise<ToolResult> {
-    const path = String(args.path ?? "");
+    const path = expandHome(String(args.path ?? ""));
     const content = String(args.content ?? "");
     try {
       await mkdir(dirname(path), { recursive: true });
@@ -170,7 +183,7 @@ export const editFileTool: Tool = {
     },
   },
   async execute(args): Promise<ToolResult> {
-    const path = String(args.path ?? "");
+    const path = expandHome(String(args.path ?? ""));
     const start = Number(args.start_line);
     const end = Number(args.end_line);
     const newContent = String(args.new_content ?? "");
@@ -231,7 +244,7 @@ export const deleteFileTool: Tool = {
     },
   },
   async execute(args): Promise<ToolResult> {
-    const path = String(args.path ?? "");
+    const path = expandHome(String(args.path ?? ""));
     if (/[*?[]/.test(path)) {
       return { success: false, data: "", error: "Wildcards not allowed. Use glob to find files, then delete individually." };
     }
@@ -273,7 +286,7 @@ export const downloadFileTool: Tool = {
   },
   async execute(args): Promise<ToolResult> {
     const url = String(args.url ?? "");
-    const destination = String(args.destination ?? "");
+    const destination = expandHome(String(args.destination ?? ""));
     if (!/^https?:\/\//i.test(url)) {
       return { success: false, data: "", error: "Only http:// and https:// URLs are supported" };
     }
