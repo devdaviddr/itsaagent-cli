@@ -18,7 +18,7 @@ import { Banner } from "./components/Banner.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { SelectModal, type ModalVariant } from "./components/SelectModal.js";
 import { filterItems, clampIndex, type SelectItem } from "./components/select.js";
-import { entryHeight, windowEntries } from "./layout/viewport.js";
+import { flattenConversation, windowLines } from "./layout/flatten.js";
 import type { TuiMode } from "./layout/chrome.js";
 
 export interface AppAgentInfo {
@@ -82,7 +82,6 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const [themeName, setThemeName] = useState(initialThemeName);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [modal, setModal] = useState<ModalState | null>(null);
-  const [selectedToolId, setSelectedToolId] = useState<number | null>(null);
   const firstRef = useRef(true);
   const cancelArmedRef = useRef(false);
 
@@ -307,40 +306,36 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     mainInput.enterInsert();
   }
 
-  const contentWidth = Math.max(20, width - 3);
+  const contentWidth = Math.max(20, width - 4);
   const matches = matchCommands(value);
   const paletteOpen = !modal && mode !== "running" && matches.length > 0;
   // Render one row short of the terminal so total output height < rows; tuir
   // full-clears (flickers) only when output height >= rows.
   const appHeight = Math.max(8, height - 1);
-  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
-  const heights = conv.entries.map((e) => entryHeight(e, contentWidth));
-  const win = windowEntries(heights, logRows, conv.scrollOffset);
-  const visible = conv.entries.slice(win.startIndex, win.endIndex);
-
-  const toolIds = conv.entries.filter((e) => e.kind === "tool").map((e) => e.id);
-  const selected = selectedToolId ?? (toolIds.length > 0 ? toolIds[toolIds.length - 1] : null);
+  // Reserve: chat box border (2) + input panel (3) + status (2) + palette.
+  const logRows = Math.max(3, appHeight - 8 - (paletteOpen ? matches.length : 0));
+  const allLines = flattenConversation(
+    conv.entries,
+    contentWidth,
+    theme,
+    mode === "running" ? conv.live : "",
+  );
+  const win = windowLines(allLines, logRows, conv.scrollOffset);
   const modalInnerWidth = Math.max(10, Math.floor(width * 0.6) - 6);
 
-  function moveSelection(dir: -1 | 1): void {
-    if (toolIds.length === 0) return;
-    const cur = selected ?? toolIds[toolIds.length - 1];
-    const idx = Math.min(toolIds.length - 1, Math.max(0, toolIds.indexOf(cur) + dir));
-    setSelectedToolId(toolIds[idx]);
-  }
   function moveModal(dir: number): void {
     setModal((m) => (m ? { ...m, index: clampIndex(m.index + dir, filterItems(m.items, query).length) } : m));
   }
   function onMainUp(): void {
     if (paletteOpen) setPaletteIndex((i) => clampIndex(i - 1, matches.length));
-    else if (value === "") moveSelection(-1);
+    else dispatch({ type: "scrollUp", lines: 1 });
   }
   function onMainDown(): void {
     if (paletteOpen) setPaletteIndex((i) => clampIndex(i + 1, matches.length));
-    else if (value === "") moveSelection(1);
+    else dispatch({ type: "scrollDown", lines: 1 });
   }
 
-  // Global keys: Ctrl+C, Ctrl+R, Tab, Esc, and info-modal nav (no text field there).
+  // Global keys: Ctrl+C, Ctrl+R (expand tools), Ctrl+U/D (page scroll), Tab, Esc.
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       if (mode === "running" && !cancelArmedRef.current) {
@@ -368,6 +363,14 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       dispatch({ type: "toggleExpandAll", expanded: anyCollapsed });
       return;
     }
+    if (key.ctrl && input === "u") {
+      dispatch({ type: "scrollUp", lines: Math.max(1, Math.floor(logRows / 2)) });
+      return;
+    }
+    if (key.ctrl && input === "d") {
+      dispatch({ type: "scrollDown", lines: Math.max(1, Math.floor(logRows / 2)) });
+      return;
+    }
     if (paletteOpen) {
       if (key.tab) {
         const m = matches[clampIndex(paletteIndex, matches.length)];
@@ -386,9 +389,6 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       }
       return;
     }
-    if (value === "" && key.return && selected !== null) {
-      dispatch({ type: "toggleExpand", id: selected });
-    }
   });
 
   const lastIsError = conv.entries.length > 0 && conv.entries[conv.entries.length - 1].kind === "error";
@@ -402,14 +402,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         {isEmpty ? (
           <Banner theme={theme} />
         ) : (
-          <MessageLog
-            visible={visible}
-            theme={theme}
-            width={contentWidth}
-            rows={logRows}
-            live={mode === "running" && conv.following ? conv.live : ""}
-            focusedToolId={selected}
-          />
+          <MessageLog lines={win.lines} theme={theme} rows={logRows} width={Math.max(20, width - 2)} />
         )}
       </Box>
       {paletteOpen ? (
