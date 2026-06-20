@@ -11,6 +11,7 @@ import { SessionLogger } from "./SessionLogger.js";
 import { parseResponse, stableKey, looksLikeMidTaskAnswer, type ParsedResponse } from "./parser.js";
 import { buildSystemPrompt } from "./promptBuilder.js";
 import { findProjectContext, formatProjectContext } from "./projectContext.js";
+import { getGitContext, formatGitContext } from "./gitContext.js";
 import { getSessionCwd } from "../tools/session.js";
 import { agentPermitsTool, MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
@@ -291,16 +292,23 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
    * re-discovers the nearest AGENTS.md from the session cwd, so project context
    * loads/unloads dynamically as the agent cd's between projects. */
   private refreshSystemPrompt(): void {
+    const cwd = getSessionCwd();
     let projectContext: string | undefined;
     if (this.config.projectContext !== false) {
-      const found = findProjectContext(getSessionCwd());
+      const found = findProjectContext(cwd);
       if (found) projectContext = formatProjectContext(found);
+    }
+    let gitContext: string | undefined;
+    if (this.config.gitContext !== false) {
+      const g = getGitContext(cwd);
+      if (g) gitContext = formatGitContext(g);
     }
     this.ctx.setSystemPrompt(
       buildSystemPrompt(this.permittedTools(), process.cwd(), this.agent?.systemPromptSuffix, this.config.skills, {
         fewShot: this.config.fewShot,
         nativeTools: this.toolUseMode === true,
         projectContext,
+        gitContext,
       }),
     );
   }

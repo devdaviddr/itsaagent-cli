@@ -11,13 +11,15 @@ interface StatusLineProps {
   ctxRatio: number | null;
   /** Optional left-side note on the hint line (e.g. the plan→build handoff hint). */
   note?: string;
+  /** Git status summary (e.g. "⎇ main · 3 changed"), shown by the cwd. */
+  git?: string;
 }
 
 /**
  * Bottom chrome: a right-aligned key-hint line plus a full-width status bar
  * (cwd · agent context on the left, ctx % and version on the right).
  */
-export function StatusLine({ theme, mode, hiddenAbove, cwd, version, ctxRatio, note }: StatusLineProps) {
+export function StatusLine({ theme, mode, hiddenAbove, cwd, version, ctxRatio, note, git }: StatusLineProps) {
   const hintColor = mode === "error" ? theme.error : mode === "running" ? theme.warning : theme.muted;
   const right =
     ctxRatio !== null ? `ctx ${ctxRatio}%  ·  v${version}` : `v${version}`;
@@ -31,7 +33,7 @@ export function StatusLine({ theme, mode, hiddenAbove, cwd, version, ctxRatio, n
         </Box>
       </Box>
       <Box justifyContent="space-between">
-        <Text color={theme.muted}>~ {cwd}</Text>
+        <Text color={theme.muted}>~ {cwd}{git ? `   ${git}` : ""}</Text>
         <Text color={theme.muted}>{right}</Text>
       </Box>
     </Box>

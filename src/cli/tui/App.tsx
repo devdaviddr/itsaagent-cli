@@ -13,6 +13,8 @@ import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
 import { resolveTheme, themeNames, type ThemeOverrides } from "./theme.js";
 import { useAgentEvents } from "./hooks/useAgentEvents.js";
+import { getGitContext, gitStatusLine } from "../../agent/gitContext.js";
+import { getSessionCwd } from "../../tools/session.js";
 import { MessageLog } from "./layout/MessageLog.js";
 import { InputBox } from "./layout/InputBox.js";
 import { StatusLine } from "./layout/StatusLine.js";
@@ -99,9 +101,18 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const hasCustom = Boolean(customTheme);
   const { modal: modalObj, showModal, hideModal } = useModal({ show: null, hide: null });
 
-  useAgentEvents(runtime, dispatch, { onUsage: setUsage, onIdle: () => setMode("idle") });
+  const [gitLine, setGitLine] = useState<string>("");
+  const refreshGit = (): void => {
+    const g = getGitContext(getSessionCwd());
+    setGitLine(g ? gitStatusLine(g) : "");
+  };
+  useAgentEvents(runtime, dispatch, {
+    onUsage: setUsage,
+    onIdle: () => { setMode("idle"); refreshGit(); },
+  });
 
   useEffect(() => {
+    refreshGit();
     // A resumed session already has history — don't wipe it; otherwise seed the prompt.
     if (!runtime.session.hasHistory) runtime.initSession();
     // When the agent calls ask_user, show the question and pause for the answer.
@@ -563,6 +574,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         hiddenAbove={win.hiddenAbove}
         cwd={basename(process.cwd())}
         version={VERSION}
+        git={gitLine}
         ctxRatio={usage ? usage.ratio : null}
         note={
           agentId === "plan" && mode !== "running" && !modal && conv.entries.some((e) => e.kind === "answer")

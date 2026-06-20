@@ -16,6 +16,7 @@ import { gitTool } from "./git.js";
 import { fetchTool } from "./fetch.js";
 import { askUserTool } from "./ask.js";
 import { runTestsTool } from "./verify.js";
+import { repoMapTool } from "./repoMap.js";
 
 export function getDefaultTools(): Tool[] {
   return [
@@ -36,6 +37,7 @@ export function getDefaultTools(): Tool[] {
     globTool,
     grepTool,
     runTestsTool,
+    repoMapTool,
   ];
 }
 
@@ -57,3 +59,4 @@ export {
 export { sshTool } from "./ssh.js";
 export { askUserTool } from "./ask.js";
 export { runTestsTool } from "./verify.js";
+export { repoMapTool } from "./repoMap.js";

@@ -40,6 +40,8 @@ export interface CliConfig {
   fewShot?: boolean;
   /** Auto-load the nearest AGENTS.md into the system prompt (default true). */
   projectContext?: boolean;
+  /** Inject git state (branch, changes, recent commits) into the prompt (default true). */
+  gitContext?: boolean;
   /**
    * Context compaction as the window fills: "structured" (default, deterministic
    * — shrink old tool results, drop superseded reads), "summarize" (also folds
@@ -122,6 +124,7 @@ export async function toAgentConfig(
     agent,
     fewShot: conf.fewShot,
     projectContext: conf.projectContext,
+    gitContext: conf.gitContext,
     compaction: conf.compaction ?? "structured",
     compactionThreshold: conf.compactionThreshold ?? 0.8,
   };

@@ -26,6 +26,8 @@ export interface PromptOptions {
   nativeTools?: boolean;
   /** Pre-formatted project-context block (from AGENTS.md) to pin into the prompt. */
   projectContext?: string;
+  /** Pre-formatted git-context block (branch, changes, recent commits). */
+  gitContext?: string;
 }
 
 /** One short worked trajectory: Thought → tool call → [TOOL RESULT] → wait → answer.
@@ -116,6 +118,10 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
 
   if (opts.projectContext) {
     prompt = `${prompt}\n\n${opts.projectContext}`;
+  }
+
+  if (opts.gitContext) {
+    prompt = `${prompt}\n\n${opts.gitContext}`;
   }
 
   if (skills && skills.length > 0) {

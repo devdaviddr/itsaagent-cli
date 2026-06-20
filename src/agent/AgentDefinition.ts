@@ -86,7 +86,7 @@ export const BUILTIN_AGENTS: AgentDefinition[] = [
     id: "plan",
     name: "Plan",
     description: "Read-only analysis and exploration — no mutations, no shell",
-    tools: ["read_file", "glob", "grep", "git", "fetch"],
+    tools: ["read_file", "glob", "grep", "git", "fetch", "repo_map"],
     readonly: true,
     systemPromptSuffix: [
       "## Plan Agent",
