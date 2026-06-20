@@ -18,6 +18,12 @@ export interface CliConfig {
   logDir: string;
   /** TUI theme name (see src/cli/tui/theme.ts). Optional; unknown/unset → default. */
   theme?: string;
+  /**
+   * User-defined theme overrides, selected via `theme: "custom"`. Any subset of
+   * theme fields: colours (user/assistant/accent/error/…), `background`, `panel`,
+   * and `bold`. Example: { "theme": "custom", "customTheme": { "accent": "#ff8800", "background": "#101010", "bold": false } }
+   */
+  customTheme?: import("./tui/theme.js").ThemeOverrides;
 }
 
 export function defaultConfig(): CliConfig {

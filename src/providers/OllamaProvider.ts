@@ -58,8 +58,9 @@ export class OllamaProvider implements Provider {
         body: JSON.stringify({
           model: this.model,
           messages,
-          // Tool calls are collected from a single non-streamed response for reliable extraction.
-          stream: !useTools,
+          // Always stream so responses render token-by-token; tool_calls are
+          // accumulated across the streamed chunks below.
+          stream: true,
           options: { temperature: this.temperature, num_predict: this.maxTokens },
           ...(useTools ? { tools } : {}),
         }),
@@ -72,19 +73,10 @@ export class OllamaProvider implements Provider {
       throw new ProviderError(`Ollama error (${response.status}): ${await response.text()}`, response.status);
     }
 
-    // Native tool-use path: one JSON object with content + optional tool_calls.
-    if (useTools) {
-      const data = await response.json() as OllamaStreamChunk;
-      const content = data.message?.content ?? "";
-      const calls = normaliseToolCalls(data.message?.tool_calls);
-      if (content) yield { delta: content, done: false };
-      yield { delta: "", done: true, toolCalls: calls.length > 0 ? calls : undefined };
-      return;
-    }
-
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const toolCalls: ToolCall[] = [];
 
     try {
       while (true) {
@@ -100,7 +92,16 @@ export class OllamaProvider implements Provider {
           if (!trimmed) continue;
           try {
             const chunk = JSON.parse(trimmed) as OllamaStreamChunk;
-            yield { delta: chunk.message?.content ?? "", done: chunk.done };
+            // Collect any tool calls that appear in this chunk.
+            const calls = normaliseToolCalls(chunk.message?.tool_calls);
+            if (calls.length > 0) toolCalls.push(...calls);
+            const content = chunk.message?.content ?? "";
+            if (chunk.done) {
+              if (content) yield { delta: content, done: false };
+              yield { delta: "", done: true, toolCalls: toolCalls.length > 0 ? toolCalls : undefined };
+            } else if (content) {
+              yield { delta: content, done: false };
+            }
           } catch { /* skip malformed NDJSON lines */ }
         }
       }

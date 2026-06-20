@@ -9,6 +9,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.0] — 2026-06-20
+
+Persistent-TUI UX overhaul. See `spec/v0.5.0.md`. Backward-compatible (minor): CLI commands, flags, and config keys are unchanged; the legacy one-shot `iaa run` view is untouched.
+
+### Added
+- **True overlay modals** — the persistent TUI's view layer migrated from Ink to the `tuir` fork (Ink can't do z-index overlays). `/agent`, `/model`, `/theme`, and `/tools` open as centered floating dialogs over the conversation, with search, ↑/↓ navigation, and Esc to close.
+- **Line-level scrollback** — scroll the whole conversation line-by-line: ↑/↓ (one line), Ctrl+U/Ctrl+D (half-page), Esc (jump to latest), and **mouse/trackpad wheel**. A long answer no longer overflows the input.
+- **Token streaming** — `OllamaProvider` now always streams; responses render token-by-token even with tools attached (tool calls still execute).
+- **Markdown styling** — answers render fenced code blocks, headings, and prose in distinct theme colours; the transcript sits in its own panel-coloured area.
+- **Theming** — optional `background`/`panel` fills and a `bold` weight toggle; new built-in themes `dracula`, `nord`, `gruvbox`; a user-defined `custom` theme via the `customTheme` config object.
+- **Browsable `/tools`** — a selectable tool list → pick one → detail view with full parameters. `/help` and `/about` are read-only info modals.
+
+### Changed
+- Borderless input and command palette; the chat area keeps a panel background (no border).
+- The persistent TUI no longer uses tuir's `<Viewport>` (it forced full-height rendering and flicker); a plain root box one row short keeps tuir on its incremental-diff path.
+- `iaa run "task"` (no `-i`) and the non-TTY/piped renderer remain on Ink and are unchanged.
+
+### Fixed
+- Fullscreen flicker (full-height clear-every-frame path) and a "Maximum update depth" render loop in the modal sync.
+- Input going unresponsive after a modal closes or after `/clear` (and other idle-staying commands) — the input now reliably re-enters insert mode.
+
+### Removed
+- Dead legacy TUI renderers superseded by the line-based log: `EntryView`, `ToolBlock`, `layout/viewport.ts`, `layout/Header.tsx`. The Ink modal integration tests (incompatible with tuir, which has no headless harness) in favour of pure-logic tests.
+
+---
+
 ## [0.4.0] — 2026-06-20
 
 Persistent, opencode-style TUI. See `spec/v0.4.0.md`. Backward-compatible (minor): no existing flag, output, or config key changes meaning.
