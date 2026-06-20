@@ -9,7 +9,7 @@ import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCo
 import { conversationReducer, initialConversation } from "./state/conversation.js";
 import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
-import { resolveTheme, themeNames } from "./theme.js";
+import { resolveTheme, themeNames, type ThemeOverrides } from "./theme.js";
 import { useAgentEvents } from "./hooks/useAgentEvents.js";
 import { MessageLog } from "./layout/MessageLog.js";
 import { InputBox } from "./layout/InputBox.js";
@@ -43,6 +43,7 @@ export interface AppProps {
   seedTask?: string;
   providerOk: boolean;
   themeName?: string;
+  customTheme?: ThemeOverrides;
 }
 
 /**
@@ -64,7 +65,7 @@ function useTermSize(): { rows: number; cols: number } {
   return dims;
 }
 
-export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName }: AppProps) {
+export function App({ runtime, agents, resolveAgent, seedTask, providerOk, themeName: initialThemeName, customTheme }: AppProps) {
   const { exit } = useApp();
   const { rows: height, cols: width } = useTermSize();
 
@@ -85,7 +86,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const firstRef = useRef(true);
   const cancelArmedRef = useRef(false);
 
-  const theme = resolveTheme(themeName);
+  const theme = resolveTheme(themeName, customTheme);
+  const hasCustom = Boolean(customTheme);
   const { modal: modalObj, showModal, hideModal } = useModal({ show: null, hide: null });
 
   useAgentEvents(runtime, dispatch, { onUsage: setUsage, onIdle: () => setMode("idle") });
@@ -172,7 +174,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         await openModelModal();
         return;
       case "theme": {
-        if (!themeNames().includes(cmd.name)) {
+        if (!themeNames(hasCustom).includes(cmd.name)) {
           dispatch({ type: "error", text: `Unknown theme "${cmd.name}".` });
           return;
         }
@@ -240,7 +242,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       title: "Select theme",
       variant: "select",
       index: 0,
-      items: themeNames().map((n) => ({ value: n, label: n })),
+      items: themeNames(hasCustom).map((n) => ({ value: n, label: n })),
     });
   }
   function openInfoModal(title: string, lines: string[]): void {
@@ -391,7 +393,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   const isEmpty = conv.entries.length === 0 && mode !== "running";
 
   return (
-    <Box flexDirection="column" height={appHeight} width={width} paddingX={1}>
+    <Box flexDirection="column" height={appHeight} width={width} paddingX={1} backgroundColor={theme.background}>
       <Box flexGrow={1} flexDirection="column" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>
         {isEmpty ? (
           <Banner theme={theme} />
@@ -436,6 +438,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
           width="60"
           borderStyle="round"
           borderColor={theme.border}
+          backgroundColor={theme.panel ?? theme.background}
           flexDirection="column"
           paddingX={2}
           paddingY={1}

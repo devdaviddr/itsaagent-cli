@@ -60,7 +60,7 @@ export function SelectModal({
   return (
     <Box flexDirection="column">
       <Box justifyContent="space-between">
-        <Text bold color={theme.accent}>
+        <Text bold={theme.bold} color={theme.accent}>
           {title}
         </Text>
         <Text color={theme.muted}>esc</Text>
@@ -100,7 +100,7 @@ export function SelectModal({
           if (isSel) {
             const line = truncate(`${it.label}${desc}`);
             return (
-              <Text key={it.value} backgroundColor={theme.accent} color="black" bold>
+              <Text key={it.value} backgroundColor={theme.accent} color="black" bold={theme.bold}>
                 {line.padEnd(inner)}
               </Text>
             );

@@ -19,7 +19,7 @@ export function Banner({ theme }: BannerProps) {
   return (
     <Box flexDirection="column" alignItems="center">
       {LOGO.map((line, i) => (
-        <Text key={i} color={theme.accent} bold>
+        <Text key={i} color={theme.accent} bold={theme.bold}>
           {line}
         </Text>
       ))}

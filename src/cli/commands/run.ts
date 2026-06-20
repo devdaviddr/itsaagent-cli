@@ -75,7 +75,7 @@ export function registerRunCommand(program: Command): void {
         interactive: Boolean(cmdOpts.interactive),
       });
       if (renderMode === "interactive") {
-        await launchTui({ runtime, seedTask: task, providerOk: true, themeName: conf.theme });
+        await launchTui({ runtime, seedTask: task, providerOk: true, themeName: conf.theme, customTheme: conf.customTheme });
         return;
       }
 

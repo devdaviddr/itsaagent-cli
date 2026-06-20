@@ -16,7 +16,7 @@ export function EntryView({ entry, theme, width, focusedToolId }: EntryViewProps
     case "user":
       return (
         <Box>
-          <Text color={theme.user} bold>
+          <Text color={theme.user} bold={theme.bold}>
             ›{" "}
           </Text>
           <Text color={theme.user}>{entry.text}</Text>

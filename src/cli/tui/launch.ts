@@ -9,12 +9,14 @@ import { BUILTIN_AGENT_IDS } from "../../agent/AgentDefinition.js";
 import { AgentRuntime as Runtime } from "../../agent/AgentRuntime.js";
 import { loadConfig, toAgentConfig } from "../config.js";
 import type { AppAgentInfo } from "./App.js";
+import type { ThemeOverrides } from "./theme.js";
 
 export interface LaunchTuiOptions {
   runtime: AgentRuntime;
   seedTask?: string;
   providerOk?: boolean;
   themeName?: string;
+  customTheme?: ThemeOverrides;
 }
 
 export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
@@ -40,6 +42,7 @@ export async function launchTui(opts: LaunchTuiOptions): Promise<void> {
       seedTask: opts.seedTask,
       providerOk: opts.providerOk ?? true,
       themeName: opts.themeName,
+      customTheme: opts.customTheme,
     }),
     // throttle coalesces spinner ticks + keystrokes into fewer frames.
     { exitOnCtrlC: false, throttle: 16 },
@@ -53,5 +56,5 @@ export async function launchHomeTui(): Promise<void> {
   const agentConfig = await toAgentConfig(conf, {});
   const runtime = new Runtime(agentConfig);
   const { ok } = await runtime.checkProvider();
-  await launchTui({ runtime, providerOk: ok, themeName: conf.theme });
+  await launchTui({ runtime, providerOk: ok, themeName: conf.theme, customTheme: conf.customTheme });
 }
