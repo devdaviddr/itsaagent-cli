@@ -8,7 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
-- Build agent reliability: added system-prompt rules so the model must emit a `<tool_call>` to perform any real action and must never claim success ("File created successfully") without a tool returning a result. Small local models (e.g. `qwen2.5-coder:7b`) were sometimes hallucinating completion instead of calling `write_file`/`bash`. The removed `cli` agent masked this because its smaller, focused tool set made the model commit to a shell call.
+- Build agent reliability — "File created successfully" with no file actually created. Three root causes:
+  - **Parser priority:** small models often emit a tool call *and* an `<answer>` in one response (the answer fabricated before the tool ran). The parser checked `<answer>` first and threw the tool call away. Tool calls are now parsed **before** `<answer>`, so the tool runs and the model answers next turn.
+  - **Prompt:** added rules that any real action MUST be a `<tool_call>` and that the model must never claim success without an actual `[TOOL RESULT]`; create files via `write_file(path, content)`.
+  - **Paths:** the system prompt now states the real home directory (and that `~` is expanded), so the model stops inventing placeholder paths like `/Users/your_username/Desktop`.
+  - Result: `qwen2.5-coder:7b` went from 0/3 → 2/3 on a multi-turn "create a file" test; the optimised `qwen2.5-coder-7b-32k:latest` is 3/3.
 
 ---
 

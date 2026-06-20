@@ -47,7 +47,7 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `</answer>`,
     ``,
     `## Rules`,
-    `1. Working directory: ${cwd}`,
+    `1. Working directory: ${cwd}. Home directory: ${os.homedir()} (the user's Desktop is ${os.homedir()}/Desktop). A leading ~ in a file path is expanded to the home directory, so ~/Desktop/x.txt works. NEVER invent placeholder paths like /Users/your_username — use the real home directory above`,
     `2. Operating system: ${process.platform} ${os.release()} (${os.arch()}) — use OS-appropriate commands (on macOS use vm_stat, sysctl, sw_vers, etc. — NOT Linux commands like free, vmstat, or /proc paths)`,
     `3. ONE tool call per response, always wrapped in <tool_call> tags`,
     `4. JSON inside <tool_call> must use "name" and "args" keys`,

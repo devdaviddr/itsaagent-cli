@@ -97,3 +97,21 @@ describe("stableKey", () => {
     expect(stableKey("bash", { cmd: "ls" })).not.toBe(stableKey("glob", { cmd: "ls" }));
   });
 });
+
+import { describe as d3, it as i3, expect as e3 } from "vitest";
+import { parseResponse as pr } from "../../src/agent/parser.js";
+d3("tool call takes priority over a premature <answer>", () => {
+  i3("executes the tool when the model emits a tool call AND an answer", () => {
+    const raw = `<thought>making the file</thought>\n{"name":"write_file","arguments":{"path":"~/x.txt","content":""}}\n<answer>File created successfully.</answer>`;
+    const r = pr(raw);
+    e3(r.toolCall?.name).toBe("write_file");
+    e3(r.answer).toBeUndefined();
+    e3(r.isExplicitAnswer).toBe(false);
+  });
+  i3("still returns an answer when there is no tool call", () => {
+    const r = pr(`<answer>all done</answer>`);
+    e3(r.toolCall).toBeUndefined();
+    e3(r.answer).toBe("all done");
+    e3(r.isExplicitAnswer).toBe(true);
+  });
+});
