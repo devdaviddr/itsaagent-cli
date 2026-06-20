@@ -8,7 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- **End-to-end test suite** (`pnpm e2e`, `tests/e2e/`) — drives the real agent runtime against a live Ollama model and asserts on real effects: simple chat, shell commands, file/folder creation, within-run context memory, across-turn chat memory, session isolation, the read-only `plan` agent, the **plan → build handoff building an Express API**, and `ask_user` clarification. Each scenario runs in a sandboxed temp dir; `--only`, `--model`, `--retries`, `--keep`, and `--list` flags supported. Complements the fast Vitest unit suite (`pnpm test`).
+- **End-to-end test suite** (`pnpm e2e`, `tests/e2e/`) — drives the real agent runtime against a live Ollama model and asserts on real effects. 19 scenarios: simple chat, shell commands, file/folder creation, **edit/append/delete**, **glob/grep search**, **git commit**, within-run context memory, across-turn chat memory, a strengthened **session-isolation** check (structural + behavioural), the read-only `plan` agent, the **plan → build handoff building an Express API** (runtime path), the **same handoff through the TUI's capture path** (conversation reducer + `lastAnswer`, i.e. pressing Tab), `ask_user` clarification, plus **gated** `fetch` (network) and `ssh` (`IAA_E2E_SSH_HOST`) scenarios that skip cleanly when unavailable.
+  - **Reliability mode** `--runs N` runs each scenario N times and reports a pass-rate; at the default `--runs 1` a failing scenario is retried once so a one-off model flake reports as `flaky` rather than failing the suite (a genuinely broken capability still fails twice → red).
+  - **Result reports** are written to `tests/e2e/results/` as timestamped Markdown (human review) and JSON (tooling) on every run.
+  - Flags: `--only`, `--model`, `--runs`, `--timeout`, `--keep`, `--list`. Each scenario runs in a sandboxed temp dir. Complements the fast Vitest unit suite (`pnpm test`).
+- **Unit coverage for the TUI handoff + parser fallback** — `lastAnswer()` (the plan-capture used on Tab) is extracted from `App.tsx` into `state/conversation.ts` and unit-tested alongside `/clear` reset semantics and the capture→handoff wiring; a new test exercises the **text-parser fallback** end-to-end (a non-tool model's `<tool_call>` text is parsed and executed).
 
 ---
 
