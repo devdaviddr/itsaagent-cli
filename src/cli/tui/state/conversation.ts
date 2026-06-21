@@ -74,6 +74,37 @@ export function initialConversation(): ConversationState {
 }
 
 /**
+ * Rebuild display entries from a restored session's context messages, so a
+ * resumed session's whole prior transcript is visible and scrollable (otherwise
+ * the log starts empty and the history appears "cut off"). Lossy by design:
+ * tool results and context notices render as `notice` entries rather than being
+ * reconstructed into structured tool blocks.
+ */
+export function entriesFromMessages(messages: Array<{ role: string; content: string }>): Entry[] {
+  const out: Entry[] = [];
+  let id = 1;
+  for (const m of messages) {
+    const content = (m.content ?? "").trim();
+    if (m.role === "system" || content.length === 0) continue;
+    if (m.role === "assistant") {
+      // Prefer the explicit <answer>; otherwise show the reasoning (thought) so an
+      // intermediate step still appears in the recount. Never concatenate the two.
+      const answer = content.match(/<answer>([\s\S]*?)<\/answer>/i);
+      const text = (answer ? answer[1] : content.replace(/<\/?thought>|<\/?answer>/g, "")).trim();
+      if (text) out.push({ id: id++, kind: "answer", text });
+      continue;
+    }
+    // user-role messages: real turns vs tool results / injected notices.
+    if (content.startsWith("[TOOL RESULT") || content.startsWith("[CONTEXT NOTICE") || content.startsWith("[CONVERSATION SUMMARY")) {
+      out.push({ id: id++, kind: "notice", text: content });
+    } else {
+      out.push({ id: id++, kind: "user", text: content });
+    }
+  }
+  return out;
+}
+
+/**
  * The most recent answer in the transcript — the plan text used when handing
  * off from `plan` to `build` (Tab in the TUI). Returns "" when there is none.
  * Shared so the handoff capture path is testable without rendering the TUI.
@@ -101,7 +132,8 @@ export type ConvAction =
   | { type: "toggleExpandAll"; expanded: boolean }
   | { type: "scrollUp"; lines: number; max?: number }
   | { type: "scrollDown"; lines: number }
-  | { type: "scrollToTail" };
+  | { type: "scrollToTail" }
+  | { type: "seed"; entries: Entry[] };
 
 /** Distributive omit so each entry variant keeps its own fields (a plain Omit<Entry,"id"> collapses the union). */
 type NewEntry = Entry extends infer T ? (T extends Entry ? Omit<T, "id"> : never) : never;
@@ -172,6 +204,10 @@ export function conversationReducer(
 
     case "notice":
       return append(state, { kind: "notice", text: action.text });
+
+    case "seed":
+      // Replace the transcript with restored history (resume), starting at the tail.
+      return { ...initialConversation(), entries: action.entries, nextId: action.entries.length + 1 };
 
     case "reset":
       // Wipe the visible transcript entirely (used by /clear).

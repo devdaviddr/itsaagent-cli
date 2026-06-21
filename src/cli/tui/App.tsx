@@ -8,7 +8,7 @@ import { loadConfig, saveConfig } from "../config.js";
 import { saveSessionTranscript } from "../saveTranscript.js";
 import { parseChatInput, matchCommands, CHAT_HELP, type CommandMeta, type ChatCommand } from "../chatCommands.js";
 import { GUIDED_PROCESS, nextStageIndex, type ProcessDef } from "../../agent/Process.js";
-import { conversationReducer, initialConversation, lastAnswer } from "./state/conversation.js";
+import { conversationReducer, initialConversation, entriesFromMessages, lastAnswer } from "./state/conversation.js";
 import { VERSION } from "../../version.js";
 import { aboutText } from "./about.js";
 import { resolveTheme, themeNames, type ThemeOverrides } from "./theme.js";
@@ -113,8 +113,13 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
 
   useEffect(() => {
     refreshGit();
-    // A resumed session already has history — don't wipe it; otherwise seed the prompt.
-    if (!runtime.session.hasHistory) runtime.initSession();
+    // A resumed session already has history — replay its transcript into the log
+    // so the whole prior session is visible/scrollable; otherwise seed the prompt.
+    if (runtime.session.hasHistory) {
+      dispatch({ type: "seed", entries: entriesFromMessages(runtime.session.ctx.get()) });
+    } else {
+      runtime.initSession();
+    }
     // When the agent calls ask_user, show the question and pause for the answer.
     runtime.setAskUserHandler((question) => {
       dispatch({ type: "notice", text: `? ${question}` });
@@ -441,8 +446,8 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   // Render one row short of the terminal so total output height < rows; tuir
   // full-clears (flickers) only when output height >= rows.
   const appHeight = Math.max(8, height - 1);
-  // Reserve: input panel (3) + status (2) + a slack row + palette.
-  const logRows = Math.max(3, appHeight - 6 - (paletteOpen ? matches.length : 0));
+  // Reserve: input panel (3) + status (2) + a slack row + the chat top border (1) + palette.
+  const logRows = Math.max(3, appHeight - 7 - (paletteOpen ? matches.length : 0));
   const allLines = flattenConversation(
     conv.entries,
     contentWidth,
@@ -504,6 +509,21 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       dispatch({ type: "scrollDown", lines: Math.max(1, Math.floor(logRows / 2)) });
       return;
     }
+    // PageUp/PageDown scroll the chat history a full page, independently of the
+    // text input (which keeps the cursor/typing). tuir doesn't surface these as
+    // SpecialKeys, so match their raw escape sequences. Ctrl+G jumps to latest.
+    if (input === "[5~") {
+      dispatch({ type: "scrollUp", lines: logRows, max: maxScroll });
+      return;
+    }
+    if (input === "[6~") {
+      dispatch({ type: "scrollDown", lines: logRows });
+      return;
+    }
+    if (key.ctrl && input === "g") {
+      dispatch({ type: "scrollToTail" });
+      return;
+    }
     if (paletteOpen) {
       if (key.tab) {
         const m = matches[clampIndex(paletteIndex, matches.length)];
@@ -554,7 +574,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         {isEmpty ? (
           <Banner theme={theme} />
         ) : (
-          <MessageLog lines={win.lines} theme={theme} rows={logRows} width={Math.max(20, width - 2)} />
+          <MessageLog lines={win.lines} theme={theme} rows={logRows} width={Math.max(20, width - 2)} scrolled={!conv.following} />
         )}
       </Box>
       {paletteOpen ? (

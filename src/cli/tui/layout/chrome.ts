@@ -16,11 +16,11 @@ export function statusHint(mode: TuiMode): string {
     case "running":
       return "● running… Esc to cancel";
     case "scrolled":
-      return "↑ scrolled — End to return to latest";
+      return "↑ history — PgUp/PgDn or Ctrl+U/D scroll · Ctrl+G latest";
     case "error":
       return "✗ error — type to continue";
     case "idle":
     default:
-      return "/help · ↵ send · Ctrl+C quit";
+      return "/help · ↵ send · PgUp scroll · Ctrl+C quit";
   }
 }
