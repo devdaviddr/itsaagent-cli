@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { wrapText, flattenConversation, windowLines, markdownLines } from "../../../src/cli/tui/layout/flatten.js";
+import { wrapText, flattenConversation, windowLines, markdownLines, stripProtocolTags } from "../../../src/cli/tui/layout/flatten.js";
 import { conversationReducer, initialConversation, type ConvAction } from "../../../src/cli/tui/state/conversation.js";
 import { resolveTheme } from "../../../src/cli/tui/theme.js";
 
 const theme = resolveTheme("default");
+
+describe("stripProtocolTags", () => {
+  it("removes answer/thought wrappers but keeps inner text", () => {
+    expect(stripProtocolTags("<thought>thinking</thought><answer>hello</answer>")).toBe("thinkinghello");
+    expect(stripProtocolTags("<answer>\n- a\n- b\n</answer>").trim()).toBe("- a\n- b");
+  });
+  it("drops tool_call blocks, including an unterminated one mid-stream", () => {
+    expect(stripProtocolTags('before<tool_call>{"name":"bash"}</tool_call>after')).toBe("beforeafter");
+    expect(stripProtocolTags('text<tool_call>{"name":"ba')).toBe("text");
+  });
+  it("strips a trailing partial tag while streaming", () => {
+    expect(stripProtocolTags("the models are:<answer")).toBe("the models are:");
+    expect(stripProtocolTags("done</")).toBe("done");
+  });
+  it("leaves ordinary text untouched", () => {
+    expect(stripProtocolTags("just a normal sentence")).toBe("just a normal sentence");
+  });
+});
 
 function build(actions: ConvAction[]) {
   let s = initialConversation();

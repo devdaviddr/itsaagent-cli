@@ -42,6 +42,21 @@ export function markdownLines(text: string, width: number, theme: Theme): Line[]
   return out;
 }
 
+/**
+ * Strip the ReAct protocol scaffolding (`<thought>`, `<answer>`, `<tool_call>`)
+ * from text before it's rendered, so the raw tags never leak into the chat view
+ * — including mid-stream, where the model emits e.g. `<answer>` before its text.
+ * Keeps the inner text; drops whole tool_call blocks (and an unterminated one
+ * still streaming) and a trailing partial closing/opening tag.
+ */
+export function stripProtocolTags(text: string): string {
+  return text
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "") // complete tool calls
+    .replace(/<tool_call>[\s\S]*$/i, "") // an unterminated tool call mid-stream
+    .replace(/<\/?(?:thought|answer)\b[^>]*>/gi, "") // thought/answer wrappers, keep inner text
+    .replace(/<\/?(?:thought|answer|tool_call)?>?$/i, ""); // a trailing partial tag mid-stream
+}
+
 /** Hard-wrap text to width, preserving explicit newlines. */
 export function wrapText(text: string, width: number): string[] {
   const w = width > 0 ? width : 80;
@@ -72,7 +87,7 @@ function entryLines(entry: Entry, width: number, theme: Theme): Line[] {
       wrapText(entry.text, width - 2).forEach((l, i) => push((i === 0 ? "● " : "  ") + l, theme.muted));
       break;
     case "answer":
-      lines.push(...markdownLines(entry.text, width, theme));
+      lines.push(...markdownLines(stripProtocolTags(entry.text), width, theme));
       break;
     case "error":
       wrapText(entry.text, width - 2).forEach((l, i) => push((i === 0 ? "✗ " : "  ") + l, theme.error));
@@ -120,7 +135,8 @@ export function flattenConversation(
     if (entry.kind === "answer" || entry.kind === "error") lines.push({ text: "", color: theme.muted });
   }
   if (live) {
-    lines.push(...markdownLines(live, width, theme));
+    const cleanLive = stripProtocolTags(live);
+    if (cleanLive.trim().length > 0) lines.push(...markdownLines(cleanLive, width, theme));
   }
   return lines;
 }

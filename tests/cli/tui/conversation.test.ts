@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   conversationReducer,
   initialConversation,
+  entriesFromMessages,
   type ConvAction,
   type ConversationState,
   type ToolEntry,
@@ -128,6 +129,43 @@ describe("conversation reducer — scroll state machine", () => {
     const back = conversationReducer(state, { type: "scrollDown", lines: 10 });
     expect(back.scrollOffset).toBe(0);
     expect(back.following).toBe(true);
+  });
+
+  it("clamps the offset to max so it can't inflate past the top", () => {
+    // Repeated scrollUp with a max never exceeds it (no scroll-down dead zone).
+    const state = run([
+      { type: "scrollUp", lines: 50, max: 10 },
+      { type: "scrollUp", lines: 50, max: 10 },
+    ]);
+    expect(state.scrollOffset).toBe(10);
+    expect(state.following).toBe(false);
+    // One scrollDown immediately moves the view (offset was clamped, not phantom).
+    const down = conversationReducer(state, { type: "scrollDown", lines: 4 });
+    expect(down.scrollOffset).toBe(6);
+  });
+
+  it("scrollUp without a max is unbounded (back-compat)", () => {
+    const state = run([{ type: "scrollUp", lines: 99 }]);
+    expect(state.scrollOffset).toBe(99);
+  });
+
+  it("seeds restored history into entries so a resumed session is scrollable", () => {
+    const msgs = [
+      { role: "system", content: "you are an agent" },
+      { role: "user", content: "create a file" },
+      { role: "assistant", content: "<thought>ok</thought><answer>Created it.</answer>" },
+      { role: "user", content: '[TOOL RESULT: write_file — OK] {"path":"a.txt"}\nWrote 3 bytes' },
+    ];
+    const state = conversationReducer(initialConversation(), {
+      type: "seed",
+      entries: entriesFromMessages(msgs),
+    });
+    // system is dropped; user turn, assistant answer, and tool result all present.
+    expect(state.entries.map((e) => e.kind)).toEqual(["user", "answer", "notice"]);
+    expect(state.entries[1].kind === "answer" && state.entries[1].text).toBe("Created it.");
+    expect(state.following).toBe(true);
+    expect(state.scrollOffset).toBe(0);
+    expect(state.nextId).toBe(state.entries.length + 1);
   });
 
   it("scrollToTail snaps to the bottom and follows", () => {
