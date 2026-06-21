@@ -117,6 +117,7 @@ cwd are pointed at it. Nothing ever touches your real home directory.
 | `ask-user` | An ambiguous request makes the agent call `ask_user`; the supplied answer drives the result. |
 | `build-full-api` | The `build` agent codes a **complete** Express API (package.json + server + `/hello` route) in **one run** — no staggered stops. |
 | `build-complete-script` | Same completeness on a **non-web** task (a Node CLI with edge-case handling) — proves the behaviour is general, not API-specific. |
+| `build-express-mvc` | The hardest build: a **runnable multi-file MVC Express API** (separate `routes/`, `controllers/`, and an in-memory `db.js`) **plus two follow-up edits** that extend existing files (an `updateBook` handler and a `PUT /:id` route). Proves multi-file creation **and** edit on the same project (runs with a larger step budget). |
 | `general-completeness` | Answers **every part** of a multi-part non-code request (a numbered 3-part question) — completeness on the verification path beyond file/code tasks. |
 | `make-folder` | Creates an **empty folder** as a real directory (`make_directory`) — not a 0-byte file. |
 | `project-in-subfolder` | A project file lands **inside** the named subfolder (not the parent or home) — covers `make_directory` + the `bash cwd` fix. |

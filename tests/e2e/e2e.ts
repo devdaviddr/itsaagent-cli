@@ -160,7 +160,7 @@ interface RuntimeBundle {
 interface Ctx {
   dir: string;
   env: NodeJS.ProcessEnv;
-  runtime(agentId: string, modelOverride?: string): Promise<RuntimeBundle>;
+  runtime(agentId: string, modelOverride?: string, maxSteps?: number): Promise<RuntimeBundle>;
   agent(id: string): AgentDefinition;
 }
 interface Scenario {
@@ -445,6 +445,77 @@ scenario("build-complete-script", "Build agent ships a complete CLI script in on
   if (!/usage/i.test(src)) fail("script should handle the no-argument case with a usage message");
 }, "verification");
 
+// 19b. The hardest multi-file build: a full MVC Express API — separate routes,
+//      controllers, and an in-memory DB across multiple files — that must be
+//      ready to run, PLUS two follow-up edits that extend an existing file.
+//      Given a larger step budget since it creates 5 files and edits 2 of them.
+scenario("build-express-mvc", "Builds a runnable multi-file Express API (routes + controllers + in-memory DB), then edits it", async (ctx) => {
+  const { rt } = await ctx.runtime("build", undefined, 40);
+
+  // --- Turn 1: the multi-file build ---
+  await rt.run(
+    "Build a runnable Express REST API for managing books inside a folder named books-api. " +
+      "Create each of these as a SEPARATE file with complete, runnable code:\n" +
+      "1. books-api/package.json — declares express as a dependency and a \"start\" script that runs node src/index.js.\n" +
+      "2. books-api/src/db.js — an in-memory store: holds an array of books and exports getAll(), getById(id), create(book), remove(id).\n" +
+      "3. books-api/src/controllers/booksController.js — exports listBooks, getBook, createBook, deleteBook handlers that use db.js and send JSON.\n" +
+      "4. books-api/src/routes/booksRoutes.js — an express.Router() mapping GET /, GET /:id, POST /, DELETE /:id to those controller functions, and exports the router.\n" +
+      "5. books-api/src/index.js — creates the express app, uses express.json(), mounts the router at /books, and listens on port 3000.\n" +
+      "Write every file in full. Do not run npm install and do not start the server.",
+  );
+
+  // MVC structure: routes and controllers live in their own directories.
+  dirExists(ctx.dir, "books-api");
+  dirExists(ctx.dir, "books-api/src/controllers");
+  dirExists(ctx.dir, "books-api/src/routes");
+
+  // Every prescribed file exists — a real multi-file build, not one collapsed file.
+  fileExists(ctx.dir, "books-api/package.json");
+  fileExists(ctx.dir, "books-api/src/db.js");
+  fileExists(ctx.dir, "books-api/src/controllers/booksController.js");
+  fileExists(ctx.dir, "books-api/src/routes/booksRoutes.js");
+  fileExists(ctx.dir, "books-api/src/index.js");
+
+  fileContains(ctx.dir, "books-api/package.json", "express");
+
+  // In-memory DB exposes its accessors.
+  const db = read(ctx.dir, "books-api/src/db.js").toLowerCase();
+  if (!db.includes("getall")) fail("db.js should expose getAll()");
+  if (!db.includes("create")) fail("db.js should expose create()");
+
+  // Controllers wire to the DB.
+  const ctrl = read(ctx.dir, "books-api/src/controllers/booksController.js").toLowerCase();
+  if (!ctrl.includes("listbooks")) fail("controller should export listBooks");
+  if (!ctrl.includes("createbook")) fail("controller should export createBook");
+
+  // Router maps the CRUD verbs.
+  const routes = read(ctx.dir, "books-api/src/routes/booksRoutes.js").toLowerCase();
+  if (!routes.includes("router")) fail("routes should use an express.Router()");
+  if (!routes.includes("post")) fail("routes should define a POST route");
+  if (!routes.includes("delete")) fail("routes should define a DELETE route");
+
+  // Entry point wires express + the router and listens — i.e. ready to run.
+  const idx = read(ctx.dir, "books-api/src/index.js").toLowerCase();
+  if (!idx.includes("express")) fail("index.js should use express");
+  if (!idx.includes("listen")) fail("index.js should call .listen()");
+  if (!idx.includes("books")) fail("index.js should mount the books router");
+
+  // --- Turn 2: extend the existing files with edits (same session) ---
+  await rt.continueChat(
+    "Now extend the existing API: edit books-api/src/controllers/booksController.js to add and export an " +
+      "updateBook handler, and edit books-api/src/routes/booksRoutes.js to add a PUT /:id route mapped to updateBook. " +
+      "Keep all the existing handlers and routes.",
+  );
+
+  // The edits landed on the EXISTING files (not a rewrite that lost the originals).
+  const ctrl2 = read(ctx.dir, "books-api/src/controllers/booksController.js").toLowerCase();
+  if (!ctrl2.includes("updatebook")) fail("the edit did not land: controller is missing updateBook");
+  if (!ctrl2.includes("createbook")) fail("the edit clobbered the existing controller (createBook gone)");
+  const routes2 = read(ctx.dir, "books-api/src/routes/booksRoutes.js").toLowerCase();
+  if (!routes2.includes("put")) fail("the edit did not land: routes is missing the PUT route");
+  if (!routes2.includes("post")) fail("the edit clobbered the existing routes (POST gone)");
+}, "verification");
+
 // 20. Make an EMPTY folder — must be a real directory, not a 0-byte file
 //     (the bug: the model used write_file to "create a folder").
 scenario("make-folder", "Creates an empty folder as a real directory", async (ctx) => {
@@ -617,9 +688,9 @@ async function buildCtx(dir: string, model: string, registry: AgentRegistry, met
       if (!def) throw new Error(`unknown agent: ${id}`);
       return def;
     },
-    async runtime(agentId: string, modelOverride?: string): Promise<RuntimeBundle> {
+    async runtime(agentId: string, modelOverride?: string, maxSteps?: number): Promise<RuntimeBundle> {
       const conf = await loadConfig();
-      const agentConfig = await toAgentConfig(conf, { agent: agentId, model: modelOverride ?? model, log: false });
+      const agentConfig = await toAgentConfig(conf, { agent: agentId, model: modelOverride ?? model, log: false, maxSteps });
       const rt = new AgentRuntime(agentConfig);
       const toolsUsed: string[] = [];
       const asks: string[] = [];
