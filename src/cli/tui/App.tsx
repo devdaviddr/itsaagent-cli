@@ -450,6 +450,10 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
     mode === "running" ? conv.live : "",
   );
   const win = windowLines(allLines, logRows, conv.scrollOffset);
+  // Furthest you can scroll up (oldest line at the top). Passed into every
+  // scrollUp dispatch so the offset is clamped here instead of inflating past
+  // the top and creating a scroll-down dead zone.
+  const maxScroll = Math.max(0, allLines.length - logRows);
   const modalInnerWidth = Math.max(10, Math.floor(width * 0.6) - 6);
 
   function moveModal(dir: number): void {
@@ -457,7 +461,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
   }
   function onMainUp(): void {
     if (paletteOpen) setPaletteIndex((i) => clampIndex(i - 1, matches.length));
-    else dispatch({ type: "scrollUp", lines: 1 });
+    else dispatch({ type: "scrollUp", lines: 1, max: maxScroll });
   }
   function onMainDown(): void {
     if (paletteOpen) setPaletteIndex((i) => clampIndex(i + 1, matches.length));
@@ -493,7 +497,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       return;
     }
     if (key.ctrl && input === "u") {
-      dispatch({ type: "scrollUp", lines: Math.max(1, Math.floor(logRows / 2)) });
+      dispatch({ type: "scrollUp", lines: Math.max(1, Math.floor(logRows / 2)), max: maxScroll });
       return;
     }
     if (key.ctrl && input === "d") {
@@ -543,7 +547,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
       width={width}
       paddingX={1}
       backgroundColor={theme.background}
-      onScrollUp={() => dispatch({ type: "scrollUp", lines: 3 })}
+      onScrollUp={() => dispatch({ type: "scrollUp", lines: 3, max: maxScroll })}
       onScrollDown={() => dispatch({ type: "scrollDown", lines: 3 })}
     >
       <Box flexGrow={1} flexDirection="column" overflow="hidden" justifyContent={isEmpty ? "center" : "flex-end"} alignItems={isEmpty ? "center" : undefined}>

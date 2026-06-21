@@ -130,6 +130,24 @@ describe("conversation reducer — scroll state machine", () => {
     expect(back.following).toBe(true);
   });
 
+  it("clamps the offset to max so it can't inflate past the top", () => {
+    // Repeated scrollUp with a max never exceeds it (no scroll-down dead zone).
+    const state = run([
+      { type: "scrollUp", lines: 50, max: 10 },
+      { type: "scrollUp", lines: 50, max: 10 },
+    ]);
+    expect(state.scrollOffset).toBe(10);
+    expect(state.following).toBe(false);
+    // One scrollDown immediately moves the view (offset was clamped, not phantom).
+    const down = conversationReducer(state, { type: "scrollDown", lines: 4 });
+    expect(down.scrollOffset).toBe(6);
+  });
+
+  it("scrollUp without a max is unbounded (back-compat)", () => {
+    const state = run([{ type: "scrollUp", lines: 99 }]);
+    expect(state.scrollOffset).toBe(99);
+  });
+
   it("scrollToTail snaps to the bottom and follows", () => {
     const state = run([
       { type: "scrollUp", lines: 99 },

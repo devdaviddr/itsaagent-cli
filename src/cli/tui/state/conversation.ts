@@ -99,7 +99,7 @@ export type ConvAction =
   | { type: "reset" }
   | { type: "toggleExpand"; id: number }
   | { type: "toggleExpandAll"; expanded: boolean }
-  | { type: "scrollUp"; lines: number }
+  | { type: "scrollUp"; lines: number; max?: number }
   | { type: "scrollDown"; lines: number }
   | { type: "scrollToTail" };
 
@@ -193,8 +193,14 @@ export function conversationReducer(
         ),
       };
 
-    case "scrollUp":
-      return { ...state, following: false, scrollOffset: state.scrollOffset + action.lines };
+    case "scrollUp": {
+      // Clamp to `max` (the furthest scrollable, from the renderer) so the offset
+      // can't inflate past the top — otherwise scrolling back down has to unwind a
+      // phantom distance first, which reads as "scroll is stuck / I can't navigate".
+      const raised = state.scrollOffset + action.lines;
+      const offset = action.max !== undefined ? Math.min(raised, action.max) : raised;
+      return { ...state, following: false, scrollOffset: offset };
+    }
 
     case "scrollDown": {
       const offset = Math.max(0, state.scrollOffset - action.lines);
