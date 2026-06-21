@@ -31,6 +31,159 @@ export function restoreCollapsedNewlines(content: string): string {
     .replace(/\\r/g, "\r");
 }
 
+/**
+ * Result of locating an edit span: either the original-file offsets to replace
+ * plus which strategy matched (and at what 1-indexed line), or a clear error.
+ */
+export type LocateEditResult =
+  | { start: number; end: number; strategy: string }
+  | { error: string };
+
+/** Collapse a single line's leading/trailing whitespace and internal runs of
+ * spaces/tabs to one space. Used by the whitespace-normalized matcher. */
+function normalizeLine(line: string): string {
+  return line.replace(/[\t ]+/g, " ").trim();
+}
+
+/**
+ * Build a whitespace-normalized version of `content` while tracking, for each
+ * character in the normalized string, the offset in the ORIGINAL string it came
+ * from. The returned `map` has `normalized.length + 1` entries: map[i] is the
+ * original offset where normalized[i] begins, and map[normalized.length] is the
+ * original offset just past the last consumed character.
+ */
+function normalizeWithMap(content: string): { normalized: string; map: number[] } {
+  const lines = content.split("\n");
+  let normalized = "";
+  const map: number[] = [];
+  let origPos = 0;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    let i = 0;
+    const n = line.length;
+    // skip leading whitespace
+    while (i < n && (line[i] === " " || line[i] === "\t")) i++;
+    while (i < n) {
+      const ch = line[i];
+      if (ch === " " || ch === "\t") {
+        // start of a whitespace run — emit one space mapped to the run's start
+        const runStart = origPos + i;
+        while (i < n && (line[i] === " " || line[i] === "\t")) i++;
+        // only emit the space if more non-ws follows (trailing ws is dropped)
+        if (i < n) {
+          map.push(runStart);
+          normalized += " ";
+        }
+      } else {
+        map.push(origPos + i);
+        normalized += ch;
+        i++;
+      }
+    }
+    // newline between lines is represented as a literal "\n" in normalized form
+    if (li < lines.length - 1) {
+      map.push(origPos + n); // offset of the "\n" in the original
+      normalized += "\n";
+    }
+    origPos += n + 1; // +1 for the "\n" delimiter that split() removed
+  }
+  // Sentinel: end-of-normalized maps to one past the last consumed original char.
+  map.push(content.length);
+  return { normalized, map };
+}
+
+/**
+ * Locate the span in `content` to replace for an edit of `oldString`, trying a
+ * ladder of progressively fuzzier strategies (exact → whitespace-normalized →
+ * line-trim anchored). Pure — no filesystem — so it can be unit-tested directly.
+ *
+ * Returns the original-file `{ start, end }` offsets and the matching strategy,
+ * or `{ error }` when nothing matches uniquely (ambiguity is an error, never a
+ * silent pick).
+ */
+export function locateEdit(content: string, oldString: string): LocateEditResult {
+  // --- 1. Exact ---
+  const exactCount = content.split(oldString).length - 1;
+  if (exactCount === 1) {
+    const start = content.indexOf(oldString);
+    return { start, end: start + oldString.length, strategy: "exact" };
+  }
+  if (exactCount > 1) {
+    return {
+      error: `old_string occurs ${exactCount} times; it must be unique. Include more surrounding context (e.g. whole lines above/below) so it matches exactly one place.`,
+    };
+  }
+
+  // --- 2. Whitespace-normalized ---
+  const fileNorm = normalizeWithMap(content);
+  // normalize each line, then join with newlines kept as structural anchors
+  const normTarget = oldString.split("\n").map(normalizeLine).join("\n");
+  if (normTarget.length > 0) {
+    const occurrences: number[] = [];
+    let idx = fileNorm.normalized.indexOf(normTarget);
+    while (idx !== -1) {
+      occurrences.push(idx);
+      idx = fileNorm.normalized.indexOf(normTarget, idx + 1);
+    }
+    if (occurrences.length === 1) {
+      const nStart = occurrences[0];
+      const nEnd = nStart + normTarget.length;
+      const start = fileNorm.map[nStart];
+      const end = fileNorm.map[nEnd];
+      const line = content.slice(0, start).split("\n").length;
+      return { start, end, strategy: `whitespace-normalized match at line ${line}` };
+    }
+    if (occurrences.length > 1) {
+      return {
+        error: `old_string matches ${occurrences.length} places after normalizing whitespace; it is ambiguous. Add more surrounding context so it matches exactly one place.`,
+      };
+    }
+  }
+
+  // --- 3. Line-trim anchored ---
+  const fileLines = content.split("\n");
+  const targetLines = oldString.split("\n").map((l) => l.trim());
+  // Drop trailing empty target lines that come from a trailing newline in oldString.
+  while (targetLines.length > 1 && targetLines[targetLines.length - 1] === "") targetLines.pop();
+  if (targetLines.length > 0) {
+    const trimmedFile = fileLines.map((l) => l.trim());
+    const runStarts: number[] = [];
+    for (let i = 0; i + targetLines.length <= trimmedFile.length; i++) {
+      let match = true;
+      for (let j = 0; j < targetLines.length; j++) {
+        if (trimmedFile[i + j] !== targetLines[j]) { match = false; break; }
+      }
+      if (match) runStarts.push(i);
+    }
+    if (runStarts.length === 1) {
+      const i = runStarts[0];
+      // start offset = sum of lengths of lines [0..i) plus their "\n" separators
+      let start = 0;
+      for (let k = 0; k < i; k++) start += fileLines[k].length + 1;
+      let end = start;
+      for (let k = 0; k < targetLines.length; k++) end += fileLines[i + k].length + 1;
+      // We counted a trailing "\n" past the last matched line; drop it so the
+      // replaced span ends at the line's end, not into the next line.
+      end = Math.min(end - 1, content.length);
+      return { start, end, strategy: `line-trim anchored match at line ${i + 1}` };
+    }
+    if (runStarts.length > 1) {
+      return {
+        error: `old_string matches ${runStarts.length} line runs after trimming indentation; it is ambiguous. Add more surrounding context so it matches exactly one place.`,
+      };
+    }
+  }
+
+  // --- 4. Nothing matched: clear error + a hint about the first differing line. ---
+  const firstLine = oldString.split("\n").find((l) => l.trim().length > 0) ?? oldString;
+  return {
+    error:
+      `old_string was not found (tried exact, whitespace-normalized, and line-trim matching). ` +
+      `The file likely differs from what you expect — read it first, then copy the exact text to replace. ` +
+      `First line that did not match: ${JSON.stringify(firstLine.trim().slice(0, 120))}`,
+  };
+}
+
 /** Files larger than this must be read with a line range, not whole. */
 const READ_FILE_MAX_BYTES = 150 * 1024;
 
@@ -256,23 +409,14 @@ export const editFileTool: Tool = {
       if (oldString === "") {
         return { success: false, data: "", error: "old_string must not be empty. To insert text, use line mode (end_line = start_line-1)." };
       }
-      const occurrences = original.split(oldString).length - 1;
-      if (occurrences === 0) {
-        return {
-          success: false,
-          data: "",
-          error: `old_string was not found in ${path}. The file may differ from what you expect — read it first, then copy the exact text (including whitespace) to replace.`,
-        };
+      // Locate the span via the exact → whitespace-normalized → line-trim ladder.
+      const located = locateEdit(original, oldString);
+      if ("error" in located) {
+        return { success: false, data: "", error: `${located.error} (in ${path})` };
       }
-      if (occurrences > 1) {
-        return {
-          success: false,
-          data: "",
-          error: `old_string occurs ${occurrences} times in ${path}; it must be unique. Include more surrounding context (e.g. whole lines above/below) so it matches exactly one place.`,
-        };
-      }
-      // Literal replacement of the single occurrence ($ in new_string stays literal).
-      const updated = original.replace(oldString, () => newString);
+      const { start, end, strategy } = located;
+      const removed = original.slice(start, end);
+      const updated = original.slice(0, start) + newString + original.slice(end);
       try {
         await writeFile(path, updated, "utf-8");
       } catch (err: unknown) {
@@ -281,10 +425,13 @@ export const editFileTool: Tool = {
       const diff = [
         `--- ${path} (before)`,
         `+++ ${path} (after)`,
-        ...oldString.split("\n").map((l) => `-${l}`),
+        ...removed.split("\n").map((l) => `-${l}`),
         ...newString.split("\n").map((l) => `+${l}`),
       ].join("\n");
-      return { success: true, data: diff };
+      // Exact matches keep the original (diff-only) success message; fuzzy matches
+      // tell the model which strategy applied and where, so it can trust the edit.
+      const data = strategy === "exact" ? diff : `Edited ${path} (${strategy})\n${diff}`;
+      return { success: true, data };
     }
 
     if (!hasLineRange) {

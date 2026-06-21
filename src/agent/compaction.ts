@@ -20,7 +20,7 @@ export interface CompactionOptions {
 
 const DEFAULTS: CompactionOptions = { recentWindow: 6 };
 /** Old tool-result payloads are capped to this many characters. */
-const DATA_CAP = 200;
+const DATA_CAP = 600;
 
 interface ParsedToolResult {
   name: string;
@@ -84,6 +84,8 @@ export function compactMessages(
       changed = true;
       return { ...m, content: `[TOOL RESULT: read_file ${tr.path} — superseded by a later read/edit, omitted to save context]` };
     }
+    // Never truncate FAILED results — the error message is diagnostic context the model needs.
+    if (m.content.includes('— FAILED]')) return m;
     // Otherwise cap the data payload (handles single huge lines and long dumps).
     if (tr.firstNl !== -1) {
       const header = headerLine(m.content);

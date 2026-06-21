@@ -189,3 +189,8 @@ Follows [semver](https://semver.org):
 - **major** `x.0.0` — breaking config changes or CLI interface changes
 
 Update `package.json` version and add a `CHANGELOG.md` entry for every release.
+
+# Claude Code Graphify Directives
+- ALWAYS check `graphify-out/GRAPH_REPORT.md` before answering architecture, import, or dependency-related questions.
+- Prefer executing localized graph queries using `graphify query "<your-question>"` over using standard text grepping or reading massive raw source files.
+- If major files change, remind the user or execute a localized `graphify update .` command to keep the index synchronised.

@@ -37,6 +37,8 @@ import os from "node:os";
 import { AgentRuntime } from "../../src/agent/AgentRuntime.js";
 import { AgentRegistry } from "../../src/agent/AgentRegistry.js";
 import type { AgentDefinition } from "../../src/agent/AgentDefinition.js";
+import { buildIndex, saveIndex } from "../../src/agent/codeIndex.js";
+import { createProvider } from "../../src/providers/index.js";
 import { loadConfig, toAgentConfig } from "../../src/cli/config.js";
 import { setSessionCwd } from "../../src/tools/session.js";
 import { conversationReducer, initialConversation, lastAnswer } from "../../src/cli/tui/state/conversation.js";
@@ -165,10 +167,11 @@ interface Scenario {
   name: string;
   desc: string;
   run(ctx: Ctx): Promise<void>;
+  feature: string;
 }
 const scenarios: Scenario[] = [];
-function scenario(name: string, desc: string, run: (ctx: Ctx) => Promise<void>): void {
-  scenarios.push({ name, desc, run });
+function scenario(name: string, desc: string, run: (ctx: Ctx) => Promise<void>, feature = "core"): void {
+  scenarios.push({ name, desc, run, feature });
 }
 
 // 1. Plain conversation — answer directly, no tool.
@@ -213,7 +216,7 @@ scenario("edit-file", "Edits an existing file's content", async (ctx) => {
   fileContains(ctx.dir, "config.txt", "9090");
   fileLacks(ctx.dir, "config.txt", "8080");
   fileContains(ctx.dir, "config.txt", "host=localhost"); // other lines preserved
-});
+}, "edit-reliability");
 
 // 5b. Modify working code WITHOUT breaking it (the "Hello Emma" corruption).
 scenario("modify-code", "Changes code via a string edit without breaking structure", async (ctx) => {
@@ -240,7 +243,7 @@ scenario("modify-code", "Changes code via a string edit without breaking structu
   // Structure must be intact: route opener + listen present, response not duplicated.
   if (!after.includes("app.get('/'") || !after.includes("app.listen(")) fail(`edit broke the file structure:\n${after}`);
   if ((after.match(/res\.send/g) ?? []).length !== 1) fail(`res.send was duplicated/garbled — broken edit:\n${after}`);
-});
+}, "edit-reliability");
 
 // 6. Append to a file.
 scenario("append-file", "Appends to an existing file without losing content", async (ctx) => {
@@ -345,7 +348,7 @@ scenario("plan-readonly", "Plan agent produces a plan and mutates nothing", asyn
   if (files.length > 0) fail(`plan agent must not create files, found: ${files.join(", ")}`);
   if (read(ctx.dir, "untouched.txt") !== "original\n") fail("plan agent mutated a file — read-only enforcement failed");
   if (answer.trim().length < 30) fail(`expected a substantive plan, got: ${truncate(answer, 120)}`);
-});
+}, "agent-safety");
 
 // 15. Runtime-level handoff: plan an Express API, build it.
 scenario("handoff-express", "Plan → build handoff builds the Express API (runtime path)", async (ctx) => {
@@ -364,7 +367,7 @@ scenario("handoff-express", "Plan → build handoff builds the Express API (runt
   const server = jsFiles.map((f) => read(ctx.dir, f).toLowerCase()).join("\n");
   if (!server.includes("express")) fail("server file should use express");
   if (!server.includes("listen")) fail("server file should call .listen()");
-});
+}, "verification");
 
 // 16. TUI capture path: drive the conversation reducer + lastAnswer exactly as
 //     the TUI does when you press Tab, then hand the captured plan to build.
@@ -390,7 +393,7 @@ scenario("guided-tui-handoff", "Plan → build via the TUI's capture path (reduc
   if (!b.rt.session.transitions.some((t) => t.from === "plan" && t.to === "build")) fail("expected a plan → build transition");
   fileExists(ctx.dir, "greet.js");
   fileContains(ctx.dir, "greet.js", "hello from build");
-});
+}, "verification");
 
 // 17. ask_user clarification.
 scenario("ask-user", "Asks the user for missing info and uses the answer", async (ctx) => {
@@ -422,7 +425,7 @@ scenario("build-full-api", "Build agent codes a full Express API in one run", as
   if (!lc.includes("express")) fail("server should use express");
   if (!lc.includes("listen")) fail("server should call .listen()");
   if (!lc.includes("/hello")) fail("server should define the /hello route");
-});
+}, "verification");
 
 // 19. Completeness generalises beyond web APIs — a CLI script with edge cases,
 //     built fully in one run (proves the build agent isn't express-specific).
@@ -440,7 +443,7 @@ scenario("build-complete-script", "Build agent ships a complete CLI script in on
   if (!lc.includes("hello")) fail("script should print the greeting");
   // The edge case was handled too — not just the happy path / first win.
   if (!/usage/i.test(src)) fail("script should handle the no-argument case with a usage message");
-});
+}, "verification");
 
 // 20. Make an EMPTY folder — must be a real directory, not a 0-byte file
 //     (the bug: the model used write_file to "create a folder").
@@ -499,6 +502,67 @@ scenario("ssh-roundtrip", "Runs a command on a host over SSH (needs IAA_E2E_SSH_
   contains(answer, "sshworks");
 });
 
+// 24. Fuzzy/anchored edit_file survives a non-verbatim old_string. The model
+//     rarely reproduces indentation exactly, so this proves the edit lands
+//     anyway. Drive the file creation through the model (not the helpers) so the
+//     exact on-disk indentation is the model's, then ask for an in-place change.
+scenario("fuzzy-edit", "edit_file lands a change despite a non-verbatim old_string", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  rt.initSession();
+  await rt.continueChat(
+    "Create a file named config.js with exactly this content:\n\n" +
+      "function startServer() {\n" +
+      "  const PORT = 3000;\n" +
+      "  return PORT;\n" +
+      "}\n",
+  );
+  await rt.continueChat("change the port to 8080");
+  fileContains(ctx.dir, "config.js", "8080");
+  fileLacks(ctx.dir, "config.js", "3000");
+}, "edit-reliability");
+
+// 25. Non-code verification path yields a COMPLETE answer to a multi-part
+//     request — proves completeness generalises beyond file/code tasks.
+scenario("general-completeness", "Answers every part of a multi-part request", async (ctx) => {
+  const { rt } = await ctx.runtime("build");
+  const answer = await rt.run(
+    "Answer all three, numbered: (1) the capital of France, (2) what 2+2 equals, " +
+      "(3) a one-word synonym for 'happy'.",
+  );
+  contains(answer, "paris");
+  contains(answer, "4");
+  const happy = ["glad", "joyful", "content", "cheerful", "merry"];
+  if (!happy.some((w) => answer.toLowerCase().includes(w))) {
+    fail(`expected a synonym for happy (${happy.join("/")}) — got: ${truncate(answer, 200)}`);
+  }
+}, "verification");
+
+// 26. iaa index + the search_code tool retrieve by meaning. GATED on the embed
+//     model: skips (not fails) when the provider can't embed or the model is absent.
+scenario("search-code", "Builds an embedding index and finds code by meaning (needs embed model)", async (ctx) => {
+  const conf = await loadConfig();
+  const embedModel = conf.embedModel ?? "nomic-embed-text";
+  const agentConfig = await toAgentConfig(conf, { agent: "build", model: MODEL_OVERRIDE ?? conf.model, log: false });
+  const provider = createProvider(agentConfig.provider);
+  if (!provider.embed) skip("provider has no embedding support");
+  try {
+    await provider.embed(["ping"], embedModel);
+  } catch {
+    skip(`embed model ${embedModel} not available (run: ollama pull ${embedModel})`);
+  }
+  // Seed a small repo with the target concept in one file and decoys around it.
+  writeFileSync(join(ctx.dir, "auth.js"), "export function validateToken(token) {\n  // verify the JWT signature and expiry\n  return token && token.length > 10;\n}\n");
+  writeFileSync(join(ctx.dir, "math.js"), "export function add(a, b) { return a + b; }\n");
+  writeFileSync(join(ctx.dir, "format.js"), "export function capitalize(s) { return s[0].toUpperCase() + s.slice(1); }\n");
+  // Build + persist the index for ctx.dir (search_code reads it via the session cwd).
+  const index = await buildIndex(ctx.dir, (texts, m) => provider.embed!(texts, m), embedModel);
+  await saveIndex(index);
+  const { rt, toolsUsed } = await ctx.runtime("build");
+  const answer = await rt.run("Use the search_code tool to find where authentication tokens are validated, then name the file that contains it.");
+  if (!toolsUsed.includes("search_code")) fail(`expected search_code, used: ${toolsUsed.join(", ") || "none"}`);
+  contains(answer, "auth");
+}, "semantic-search");
+
 // NOTE: the text-parser fallback (no native tool_calls → parse <tool_call>
 // text → execute it) is covered deterministically in the unit suite
 // (tests/agent/parserFallback.test.ts) with a scripted provider, rather than
@@ -518,6 +582,7 @@ interface RunResult {
 interface ScenarioResult {
   name: string;
   desc: string;
+  feature: string;
   status: Status;
   skipReason?: string;
   runs: RunResult[];
@@ -640,15 +705,42 @@ function writeResults(payload: {
   lines.push("");
   lines.push(`**Summary:** ${counts.pass} passed · ${counts.flaky} flaky · ${counts.fail} failed · ${counts.skip} skipped (of ${payload.results.length})`);
   lines.push("");
-  lines.push(`| | Scenario | Status | Pass rate | Avg time | Turns | Tools | Notes |`);
-  lines.push(`|---|---|---|---|---|---|---|---|`);
+
+  // Feature coverage: group scenarios by the v0.4.0 capability they exercise.
+  // pass+flaky count as passing; skipped scenarios are excluded from the
+  // denominator but surfaced as "(N skipped)".
+  lines.push(`## Feature coverage`);
+  lines.push("");
+  const byFeature = new Map<string, ScenarioResult[]>();
+  for (const r of payload.results) {
+    const list = byFeature.get(r.feature) ?? [];
+    list.push(r);
+    byFeature.set(r.feature, list);
+  }
+  const features = [...byFeature.keys()].sort((a, b) => {
+    if (a === "core") return 1;
+    if (b === "core") return -1;
+    return a.localeCompare(b);
+  });
+  for (const feat of features) {
+    const list = byFeature.get(feat)!;
+    const skipped = list.filter((r) => r.status === "skip").length;
+    const counted = list.filter((r) => r.status !== "skip");
+    const passing = counted.filter((r) => r.status === "pass" || r.status === "flaky").length;
+    const skipNote = skipped ? ` (${skipped} skipped)` : "";
+    lines.push(`- **${feat}:** ${passing}/${counted.length} passing${skipNote}`);
+  }
+  lines.push("");
+
+  lines.push(`| | Scenario | Feature | Status | Pass rate | Avg time | Turns | Tools | Notes |`);
+  lines.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const r of payload.results) {
     const done = r.runs.filter((x) => x.ms > 0);
     const avg = done.length ? (done.reduce((a, x) => a + x.ms, 0) / done.length / 1000).toFixed(1) + "s" : "—";
     const turns = r.status === "skip" ? "—" : avgOf(r.runs, (m) => m.turns).toFixed(0);
     const toolsAvg = r.status === "skip" ? "—" : `${avgOf(r.runs, (m) => m.toolCalls).toFixed(0)}${avgOf(r.runs, (m) => m.toolErrors) >= 0.5 ? `/${avgOf(r.runs, (m) => m.toolErrors).toFixed(0)}e` : ""}`;
     const note = r.status === "skip" ? r.skipReason ?? "" : r.runs.find((x) => !x.ok)?.err ?? "";
-    lines.push(`| ${icon(r.status)} | \`${r.name}\` | ${r.status} | ${r.passRate} | ${avg} | ${turns} | ${toolsAvg} | ${truncate(note, 120).replace(/\|/g, "/")} |`);
+    lines.push(`| ${icon(r.status)} | \`${r.name}\` | ${r.feature} | ${r.status} | ${r.passRate} | ${avg} | ${turns} | ${toolsAvg} | ${truncate(note, 120).replace(/\|/g, "/")} |`);
   }
   lines.push("");
   lines.push(`> ${payload.results.length} scenarios. Generated by \`pnpm e2e\`.`);
@@ -771,7 +863,7 @@ async function main(): Promise<void> {
       passRate = `${passes}/${runs.length}`;
       status = passes === runs.length ? "pass" : passes === 0 ? "fail" : "flaky";
     }
-    results.push({ name: s.name, desc: s.desc, status, skipReason, runs, passRate });
+    results.push({ name: s.name, desc: s.desc, feature: s.feature, status, skipReason, runs, passRate });
 
     const tag =
       status === "pass" ? C.green("✓ PASS") : status === "flaky" ? C.yellow("~ FLAKY") : status === "skip" ? C.dim("⏭ SKIP") : C.red("✗ FAIL");

@@ -171,7 +171,7 @@ export class Session {
     const lines: string[] = [];
     if (reads.size) lines.push(`- Files read: ${[...reads].join(", ")}`);
     if (searches.size) lines.push(`- Searched: ${[...searches].join(", ")}`);
-    if (commands.length) lines.push(`- Commands run: ${commands.slice(0, 10).join("; ")}`);
+    if (commands.length) lines.push(`- Commands run: ${commands.slice(-10).join("; ")}`);
     if (writes.size) lines.push(`- Files written/edited: ${[...writes].join(", ")}`);
     return lines.length ? lines.join("\n") : "- (nothing was examined during planning)";
   }

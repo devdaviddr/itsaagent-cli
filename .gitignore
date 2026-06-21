@@ -34,3 +34,7 @@ coverage/
 
 # E2E run reports (generated)
 tests/e2e/results/
+
+graphify-out/
+
+.claude/worktrees/

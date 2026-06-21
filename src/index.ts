@@ -10,8 +10,10 @@ import { registerRunCommand } from "./cli/commands/run.js";
 import { registerSkillsCommand } from "./cli/commands/skills.js";
 import { registerSessionsCommand } from "./cli/commands/sessions.js";
 import { registerToolsCommand } from "./cli/commands/tools.js";
+import { registerIndexCommand } from "./cli/commands/index_cmd.js";
 import { shouldShowMenu } from "./cli/menu.js";
 import { launchHomeTui } from "./cli/tui/launch.js";
+import { VERSION } from "./version.js";
 
 const program = new Command();
 
@@ -20,7 +22,7 @@ const collect = (val: string, acc: string[]): string[] => { acc.push(val); retur
 program
   .name("iaa")
   .description("ItsAAgent — Ollama-optimised ReAct agent for the CLI")
-  .version("0.3.0")
+  .version(VERSION)
   .option("-v, --verbose", "Show agent reasoning, tool calls, and stream output live")
   .option("-l, --log", "Write session log to disk (auto-enabled with -v)")
   .option("-m, --model <model>", "Override the model for this run")
@@ -39,6 +41,7 @@ registerToolsCommand(program);
 registerModelsCommand(program);
 registerCheckCommand(program);
 registerConfigCommand(program);
+registerIndexCommand(program);
 
 if (shouldShowMenu(process.argv, Boolean(process.stdout.isTTY))) {
   launchHomeTui().catch((err: unknown) => {
