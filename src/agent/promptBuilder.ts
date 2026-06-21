@@ -1,7 +1,12 @@
 import os from "node:os";
 import type { Tool, Skill } from "../types.js";
 
-export function buildToolDescriptions(tools: Tool[]): string {
+export function buildToolDescriptions(tools: Tool[], opts: { compact?: boolean } = {}): string {
+  if (opts.compact) {
+    // Compact: name + one-line description only. Safe ONLY in native tool mode,
+    // where the JSON schema (params + required) is sent to the model separately.
+    return tools.map((t) => `### ${t.definition.name}\n${t.definition.description}`).join("\n\n");
+  }
   return tools
     .map((t) => {
       const props = Object.entries(t.definition.parameters.properties)
@@ -24,6 +29,9 @@ export interface PromptOptions {
   fewShot?: boolean;
   /** The model uses native function-calling; drop the XML <tool_call> format from the prompt. */
   nativeTools?: boolean;
+  /** Drop the Parameters/Required block from tool descriptions (only honoured in native mode,
+   * where the JSON schema already carries params). Saves ~300–500 prompt tokens/turn. */
+  compactTools?: boolean;
   /** Pre-formatted project-context block (from AGENTS.md) to pin into the prompt. */
   projectContext?: string;
   /** Pre-formatted git-context block (branch, changes, recent commits). */
@@ -56,6 +64,9 @@ function buildFewShot(native: boolean): string {
 export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: string, skills?: Skill[], opts: PromptOptions = {}): string {
   const fewShot = opts.fewShot !== false;
   const native = opts.nativeTools === true;
+  // Compact tool descriptions only when native tools are active — the JSON schema
+  // carries params then. In text mode, descriptions MUST stay full.
+  const compactTools = opts.compactTools === true && native;
 
   // Native function-calling vs the text <tool_call> protocol — teach exactly one,
   // so the model doesn't get contradictory "emit native" + "emit XML" instructions.
@@ -99,7 +110,7 @@ export function buildSystemPrompt(tools: Tool[], cwd: string, agentSuffix?: stri
     `If the user is just making conversation or asking something you already know, simply reply — you do not have to use a tool for everything.`,
     ``,
     `## Available Tools`,
-    buildToolDescriptions(tools),
+    buildToolDescriptions(tools, { compact: compactTools }),
     ``,
     ...formatBlock,
     ``,

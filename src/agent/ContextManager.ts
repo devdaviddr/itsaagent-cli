@@ -1,13 +1,19 @@
 import type { Message } from "../types.js";
 import { compactMessages, type CompactionMode } from "./compaction.js";
 
-const TOKEN_ESTIMATE_RATIO = 3.5;
+/** Starting chars-per-token estimate; refined per-model via calibrate(). */
+const DEFAULT_TOKEN_ESTIMATE_RATIO = 3.5;
 /** Each message carries framing tokens (role markers, delimiters) beyond its text. */
 const PER_MESSAGE_OVERHEAD = 4;
+/** Bounds on the calibrated ratio — guards against degenerate single-call observations. */
+const RATIO_MIN = 2.0;
+const RATIO_MAX = 6.0;
 
 export class ContextManager {
   private messages: Message[] = [];
   private readonly maxTokens: number;
+  /** Chars-per-token ratio, refined as the provider reports real prompt-token counts. */
+  private tokenEstimateRatio = DEFAULT_TOKEN_ESTIMATE_RATIO;
   /** Cumulative count of messages evicted since the last clear(). */
   private evictedTotal = 0;
   private onEvict?: (count: number) => void;
@@ -95,7 +101,21 @@ export class ContextManager {
   }
 
   private estimateTokens(text: string): number {
-    return Math.ceil(text.length / TOKEN_ESTIMATE_RATIO);
+    return Math.ceil(text.length / this.tokenEstimateRatio);
+  }
+
+  /**
+   * Refine the chars-per-token ratio from a real prompt-token count reported by
+   * the provider. Uses a light EMA so a single noisy observation can't swing the
+   * estimate, and clamps to a sane band. Best-effort; a non-positive token count
+   * (provider didn't report) is ignored.
+   */
+  calibrate(charsSent: number, actualPromptTokens: number): void {
+    if (actualPromptTokens > 0 && charsSent > 0) {
+      const observed = charsSent / actualPromptTokens;
+      const next = this.tokenEstimateRatio * 0.7 + observed * 0.3;
+      this.tokenEstimateRatio = Math.min(RATIO_MAX, Math.max(RATIO_MIN, next));
+    }
   }
 
   private totalTokens(): number {

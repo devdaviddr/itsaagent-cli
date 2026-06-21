@@ -11,7 +11,7 @@ describe("compactMessages (structured)", () => {
       m("system", "sys"), // 0 pinned
       m("user", "task"), // 1 pinned
       m("user", '[TOOL RESULT: read_file — OK] {"path":"a.js"}\nold1\nold2\nold3'), // 2 superseded by 4
-      m("user", '[TOOL RESULT: bash — OK] {"command":"ls"}\n' + "abcdefghij".repeat(30)), // 3 truncated (300-char payload)
+      m("user", '[TOOL RESULT: bash — OK] {"command":"ls"}\n' + "abcdefghij".repeat(70)), // 3 truncated (700-char payload)
       m("user", '[TOOL RESULT: read_file — OK] {"path":"a.js"}\nnew1\nnew2'), // 4 (latest a.js)
       m("user", "some thought"), // 5 not a tool result → kept
       m("assistant", "<answer>partial</answer>"), // 6 recent
@@ -48,7 +48,7 @@ describe("ContextManager structured compaction at threshold", () => {
     ctx.add({ role: "system", content: "sys" });
     ctx.add({ role: "user", content: "do the task" });
     for (let i = 0; i < 20; i++) {
-      ctx.add({ role: "user", content: `[TOOL RESULT: bash — OK] {"command":"c${i}"}\n${"x".repeat(300)}` });
+      ctx.add({ role: "user", content: `[TOOL RESULT: bash — OK] {"command":"c${i}"}\n${"x".repeat(700)}` });
     }
     const msgs = ctx.get();
     // The original task survives.

@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import type { AgentConfig, Tool, ToolResult, ToolSpec, ToolCall } from "../types.js";
 import { createProvider } from "../providers/index.js";
 import type { Provider } from "../providers/Provider.js";
-import { getDefaultTools } from "../tools/index.js";
+import { getDefaultTools, setEmbedder } from "../tools/index.js";
 import { ContextManager } from "./ContextManager.js";
 import { Session } from "./Session.js";
 import { LoopDetectedError, MaxStepsError, toErrorMessage } from "./errors.js";
@@ -13,6 +13,7 @@ import { buildSystemPrompt } from "./promptBuilder.js";
 import { findProjectContext, formatProjectContext } from "./projectContext.js";
 import { getGitContext, formatGitContext } from "./gitContext.js";
 import { getSessionCwd } from "../tools/session.js";
+import { checkDiagnostics } from "../tools/verify.js";
 import { agentPermitsTool, MUTATION_TOOLS, type AgentDefinition } from "./AgentDefinition.js";
 
 export interface AgentRuntimeEvents {
@@ -67,6 +68,10 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
   private verifiedOnce = false;
   /** Whether the best-effort failure recovery turn has fired this run (cap: once). */
   private recoveredOnce = false;
+  /** Budget injection flags — survive eviction unlike ctx.get().some() checks. */
+  private budgetInjected50 = false;
+  private budgetInjected75 = false;
+  private budgetInjected90 = false;
   /** Interactive handler for the ask_user tool (provided by the TUI). */
   private askUserHandler?: (question: string) => Promise<string>;
 
@@ -100,8 +105,21 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     for (const t of getDefaultTools()) {
       this.tools.set(t.definition.name, t);
     }
+    // Wire the embedder used by the stateless `search_code` tool. The tool has no
+    // provider handle of its own (see src/tools/searchCode.ts), so the runtime
+    // registers a live embed fn here when the provider supports embeddings.
+    this.wireEmbedder();
     // Prevent unhandled 'error' event crashes when no listener is attached
     this.on("error", () => {});
+  }
+
+  /** Register the embed fn for `search_code` when the provider supports embeddings. */
+  private wireEmbedder(): void {
+    const embedModel = this.config.embedModel ?? "nomic-embed-text";
+    if (this.provider.embed) {
+      const embed = this.provider.embed.bind(this.provider);
+      setEmbedder((texts, model) => embed(texts, model), embedModel);
+    }
   }
 
   /** Conversation context, owned by the session. */
@@ -144,6 +162,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.session.model = model;
     this.provider = createProvider(this.config.provider);
     this.toolUseMode = undefined;
+    this.wireEmbedder();
   }
 
   /** Register the interactive ask_user handler (resolves with the user's answer). */
@@ -216,7 +235,17 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     try {
       this.session.recordTool(name, args);
       if (MUTATION_TOOLS.has(name)) this.mutationRan = true;
-      return await tool.execute(args);
+      const result = await tool.execute(args);
+      // After a successful file write/edit, feed real linter/type diagnostics back
+      // to the model (best-effort, local tools only — never throws/blocks long).
+      if (result.success && (name === "write_file" || name === "edit_file" || name === "append_file")) {
+        const path = typeof args.path === "string" ? args.path : undefined;
+        if (path) {
+          const note = await checkDiagnostics(path, getSessionCwd()).catch(() => null);
+          if (note) result.data = result.data ? `${result.data}\n${note}` : note;
+        }
+      }
+      return result;
     } catch (err: unknown) {
       return { success: false, data: "", error: toErrorMessage(err) };
     }
@@ -224,9 +253,8 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
 
   /** Initialise a persistent chat session. Call once before continueChat(). */
   initSession(): void {
-    const cwd = process.cwd();
-    this.ctx.clear();
-    this.ctx.add({ role: "system", content: buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }) });
+    const cwd = getSessionCwd();
+    this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }));
   }
 
   /**
@@ -267,7 +295,7 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     const startTime = Date.now();
     const summary = this.session.examinedSummary();
     this.session.setAgent(buildAgent);
-    const cwd = process.cwd();
+    const cwd = getSessionCwd();
     this.ctx.reset(buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, { fewShot: this.config.fewShot }));
     this.ctx.add({
       role: "user",
@@ -304,9 +332,10 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       if (g) gitContext = formatGitContext(g);
     }
     this.ctx.setSystemPrompt(
-      buildSystemPrompt(this.permittedTools(), process.cwd(), this.agent?.systemPromptSuffix, this.config.skills, {
+      buildSystemPrompt(this.permittedTools(), cwd, this.agent?.systemPromptSuffix, this.config.skills, {
         fewShot: this.config.fewShot,
         nativeTools: this.toolUseMode === true,
+        compactTools: this.config.compactPrompt,
         projectContext,
         gitContext,
       }),
@@ -351,6 +380,9 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     this.mutationRan = false;
     this.verifiedOnce = false;
     this.recoveredOnce = false;
+    this.budgetInjected50 = false;
+    this.budgetInjected75 = false;
+    this.budgetInjected90 = false;
     // detectToolUse() has run in every caller by now — align the prompt to the mode.
     this.refreshSystemPrompt();
     try {
@@ -361,11 +393,99 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
     }
   }
 
+  /**
+   * Per-call bookkeeping shared by the single-call and multi-call (parallel)
+   * paths: loop detection, executes the tool, records the result, and runs the
+   * failure-escalation + recency-nudge logic. Mutates the passed loop state.
+   *
+   * Returns a control signal:
+   *  - `{ kind: "ok" }`            — proceed normally
+   *  - `{ kind: "abort", msg }`    — loop must return `msg` (loop/failure abort)
+   *  - `{ kind: "recovered" }`     — a recovery turn was injected; stop the batch
+   *                                  and advance to the next step
+   */
+  private async processToolCall(
+    call: ToolCall,
+    thought: string | undefined,
+    step: number,
+    state: { callCounts: Map<string, number>; recencyWindow: string[]; failureCounts: Map<string, number>; lastNudgeStep: number },
+    precomputed?: ToolResult,
+  ): Promise<{ kind: "ok" } | { kind: "abort"; msg: string } | { kind: "recovered" }> {
+    const { name, args } = call;
+
+    // Loop detection — key is order-independent via stableKey
+    const callKey = stableKey(name, args);
+    const count = (state.callCounts.get(callKey) ?? 0) + 1;
+    state.callCounts.set(callKey, count);
+    if (count >= 3) {
+      const err = new LoopDetectedError(name);
+      this.emit("error", { error: err, stepIndex: step });
+      await this.logger.logError(err.message);
+      return { kind: "abort", msg: err.message };
+    }
+
+    this.emit("tool:call", { name, args, stepIndex: step });
+    // `precomputed` lets a read-only batch run executions concurrently up-front,
+    // then feed the results through here in order for deterministic bookkeeping.
+    const result = precomputed ?? (await this.executeTool(name, args));
+    this.emit("tool:result", { name, result, stepIndex: step });
+
+    await this.logger.logStep(step, thought, name, args, result);
+    this.ctx.add({ role: "user", content: formatToolResult(name, args, result) });
+
+    // --- Failure escalation: consecutive failures of the same tool ---
+    if (!result.success) {
+      const fails = (state.failureCounts.get(name) ?? 0) + 1;
+      state.failureCounts.set(name, fails);
+      if (fails >= 3) {
+        // Best-effort recovery: instead of a dead-end abort, give the model ONE
+        // chance to change approach, ask the user, or summarise what it achieved.
+        if (!this.recoveredOnce && step < this.config.maxSteps) {
+          this.recoveredOnce = true;
+          state.failureCounts.set(name, 0); // clear the streak so the recovery turn isn't aborted on entry
+          this.ctx.add({
+            role: "user",
+            content: `[RECOVERY] ${name} has failed 3 times — stop repeating it. Do ONE of: (a) use a different tool or approach, (b) call ask_user if you are missing information, or (c) give an <answer> summarising what you accomplished and what remains. Do not call ${name} the same way again.`,
+          });
+          return { kind: "recovered" };
+        }
+        const err = new LoopDetectedError(name);
+        const msg = `Tool ${name} failed 3 times consecutively`;
+        this.emit("error", { error: err, stepIndex: step });
+        await this.logger.logError(msg);
+        return { kind: "abort", msg };
+      }
+      if (fails === 2) {
+        this.ctx.add({
+          role: "user",
+          content: `[AGENT NOTICE: ${name} has failed twice in a row. Before trying again, state explicitly why the previous attempts failed and what you will do differently.]`,
+        });
+      }
+    } else {
+      state.failureCounts.set(name, 0); // reset streak on success
+    }
+
+    // --- Recency-window loop detection (semantic loop nudge) ---
+    state.recencyWindow.push(name);
+    if (state.recencyWindow.length > 8) state.recencyWindow.shift();
+    const sameToolCount = state.recencyWindow.filter((n) => n === name).length;
+    if (sameToolCount >= 5 && step - state.lastNudgeStep >= 4) {
+      state.lastNudgeStep = step;
+      this.ctx.add({
+        role: "user",
+        content: `[AGENT NOTICE: You have called ${name} ${sameToolCount} times recently. Do you have enough information to proceed, or are you stuck? State what you are looking for before calling another tool.]`,
+      });
+    }
+    return { kind: "ok" };
+  }
+
   private async runLoopInner(startTime: number): Promise<string> {
-    const callCounts = new Map<string, number>();
-    const recencyWindow: string[] = []; // last N tool names
-    const failureCounts = new Map<string, number>(); // consecutive failures per tool
-    let lastNudgeStep = -10;
+    const state = {
+      callCounts: new Map<string, number>(),
+      recencyWindow: [] as string[], // last N tool names
+      failureCounts: new Map<string, number>(), // consecutive failures per tool
+      lastNudgeStep: -10,
+    };
     const useTools = this.toolUseMode === true;
     const toolSpecs = useTools ? this.toolSpecs() : undefined;
 
@@ -373,15 +493,39 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
       if (this.cancelled) return this.finishCancelled(step);
       this.emit("step", { index: step, total: this.config.maxSteps });
 
+      // Step budget injection at 50%, 75%, 90% of maxSteps
+      const budgetRatio = step / this.config.maxSteps;
+      const remaining = this.config.maxSteps - step;
+      if (budgetRatio >= 0.9 && !this.budgetInjected90) {
+        this.budgetInjected90 = true;
+        this.ctx.add({ role: 'user', content: `[BUDGET:90] Step ${step}/${this.config.maxSteps}. Only ${remaining} steps left. Stop exploring — finish and verify the task now.`, notice: true });
+      } else if (budgetRatio >= 0.75 && !this.budgetInjected75) {
+        this.budgetInjected75 = true;
+        this.ctx.add({ role: 'user', content: `[BUDGET:75] Step ${step}/${this.config.maxSteps}. ${remaining} steps remaining. Prioritise completing what you have started over further exploration.`, notice: true });
+      } else if (budgetRatio >= 0.5 && !this.budgetInjected50) {
+        this.budgetInjected50 = true;
+        this.ctx.add({ role: 'user', content: `[BUDGET:50] Step ${step}/${this.config.maxSteps}. Halfway through your step budget. Make sure you are making progress toward finishing.`, notice: true });
+      }
+
       let raw = "";
       let nativeCalls: ToolCall[] | undefined;
-      for await (const chunk of this.provider.stream(this.ctx.forProvider(), toolSpecs)) {
+      // Chars actually sent to the provider this turn (the prompt). Captured before
+      // the assistant reply is appended, so we can calibrate the token estimate.
+      const promptMessages = this.ctx.forProvider();
+      const promptChars = promptMessages.reduce((sum, m) => sum + m.content.length, 0);
+      let tokenUsage: { prompt: number; completion: number } | undefined;
+      for await (const chunk of this.provider.stream(promptMessages, toolSpecs)) {
         if (this.cancelled) break;
         raw += chunk.delta;
         if (chunk.delta) this.emit("chunk", { delta: chunk.delta, stepIndex: step });
         if (chunk.toolCalls && chunk.toolCalls.length > 0) nativeCalls = chunk.toolCalls;
+        if (chunk.tokenUsage) tokenUsage = chunk.tokenUsage; // last one wins
       }
       if (this.cancelled) return this.finishCancelled(step);
+
+      // Refine the char-per-token estimate from the provider's real prompt count.
+      // Best-effort — calibrate() ignores non-positive counts and never throws.
+      if (tokenUsage) this.ctx.calibrate(promptChars, tokenUsage.prompt);
 
       // Native tool-use: structure comes from the API, so parseResponse is skipped.
       // When there are no structured tool_calls (even a tool-capable model may emit
@@ -457,69 +601,41 @@ export class AgentRuntime extends EventEmitter<AgentRuntimeEvents> {
         return answer;
       }
 
-      const { name, args } = parsed.toolCall;
+      // --- Multi-call batch: a tool-capable model returned several tool_calls in
+      // one response. Execute ALL of them (not just the first), running the same
+      // per-call bookkeeping for each. Read-only batches run concurrently; any
+      // mutation/ask_user makes the whole batch sequential to avoid file/cwd races.
+      if (useTools && nativeCalls && nativeCalls.length > 1) {
+        const calls = nativeCalls;
+        const allReadOnly = calls.every((c) => !MUTATION_TOOLS.has(c.name) && c.name !== "ask_user");
 
-      // Loop detection — key is order-independent via stableKey
-      const callKey = stableKey(name, args);
-      const count = (callCounts.get(callKey) ?? 0) + 1;
-      callCounts.set(callKey, count);
-      if (count >= 3) {
-        const err = new LoopDetectedError(name);
-        this.emit("error", { error: err, stepIndex: step });
-        await this.logger.logError(err.message);
-        return err.message;
-      }
-
-      this.emit("tool:call", { name, args, stepIndex: step });
-      const result = await this.executeTool(name, args);
-      this.emit("tool:result", { name, result, stepIndex: step });
-
-      await this.logger.logStep(step, parsed.thought, name, args, result);
-      this.ctx.add({ role: "user", content: formatToolResult(name, args, result) });
-
-      // --- Failure escalation: consecutive failures of the same tool ---
-      if (!result.success) {
-        const fails = (failureCounts.get(name) ?? 0) + 1;
-        failureCounts.set(name, fails);
-        if (fails >= 3) {
-          // Best-effort recovery: instead of a dead-end abort, give the model ONE
-          // chance to change approach, ask the user, or summarise what it achieved.
-          if (!this.recoveredOnce && step < this.config.maxSteps) {
-            this.recoveredOnce = true;
-            failureCounts.set(name, 0); // clear the streak so the recovery turn isn't aborted on entry
-            this.ctx.add({
-              role: "user",
-              content: `[RECOVERY] ${name} has failed 3 times — stop repeating it. Do ONE of: (a) use a different tool or approach, (b) call ask_user if you are missing information, or (c) give an <answer> summarising what you accomplished and what remains. Do not call ${name} the same way again.`,
-            });
-            continue;
+        const results: Array<{ kind: "ok" } | { kind: "abort"; msg: string } | { kind: "recovered" }> = [];
+        if (allReadOnly) {
+          // Execute the read-only tools concurrently, THEN apply bookkeeping in the
+          // original order so [TOOL RESULT] messages and loop counters are deterministic.
+          const executed = await Promise.all(calls.map((c) => this.executeTool(c.name, c.args)));
+          for (let i = 0; i < calls.length; i++) {
+            const r = await this.processToolCall(calls[i], parsed.thought, step, state, executed[i]);
+            results.push(r);
+            if (r.kind !== "ok") break;
           }
-          const err = new LoopDetectedError(name);
-          const msg = `Tool ${name} failed 3 times consecutively`;
-          this.emit("error", { error: err, stepIndex: step });
-          await this.logger.logError(msg);
-          return msg;
+        } else {
+          // Any mutation/ask_user → fully sequential to avoid file/cwd races.
+          for (const c of calls) {
+            const r = await this.processToolCall(c, parsed.thought, step, state);
+            results.push(r);
+            if (r.kind !== "ok") break;
+          }
         }
-        if (fails === 2) {
-          this.ctx.add({
-            role: "user",
-            content: `[AGENT NOTICE: ${name} has failed twice in a row. Before trying again, state explicitly why the previous attempts failed and what you will do differently.]`,
-          });
-        }
-      } else {
-        failureCounts.set(name, 0); // reset streak on success
+        const aborted = results.find((r) => r.kind === "abort");
+        if (aborted && aborted.kind === "abort") return aborted.msg;
+        continue;
       }
 
-      // --- Recency-window loop detection (semantic loop nudge) ---
-      recencyWindow.push(name);
-      if (recencyWindow.length > 8) recencyWindow.shift();
-      const sameToolCount = recencyWindow.filter((n) => n === name).length;
-      if (sameToolCount >= 5 && step - lastNudgeStep >= 4) {
-        lastNudgeStep = step;
-        this.ctx.add({
-          role: "user",
-          content: `[AGENT NOTICE: You have called ${name} ${sameToolCount} times recently. Do you have enough information to proceed, or are you stuck? State what you are looking for before calling another tool.]`,
-        });
-      }
+      // --- Single-call path ---
+      const outcome = await this.processToolCall(parsed.toolCall, parsed.thought, step, state);
+      if (outcome.kind === "abort") return outcome.msg;
+      // (recovered/ok both fall through to the next step)
     }
 
     const err = new MaxStepsError(this.config.maxSteps);

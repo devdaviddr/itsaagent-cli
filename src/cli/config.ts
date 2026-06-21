@@ -16,6 +16,8 @@ export interface CliConfig {
   model: string;
   host: string;
   apiKey?: string;
+  /** Local embedding model used by `iaa index` and `search_code` (default nomic-embed-text). */
+  embedModel?: string;
   maxSteps: number;
   maxContextTokens: number;
   logDir: string;
@@ -56,6 +58,12 @@ export interface CliConfig {
   numPredict?: number;
   /** Extra stop sequences passed to the model. */
   stop?: string[];
+  /**
+   * Compact the system prompt's tool descriptions when native tools are active —
+   * drops the redundant Parameters/Required block (the JSON schema already carries
+   * it), saving ~300–500 tokens/turn. Defaults to enabled for the Ollama provider.
+   */
+  compactPrompt?: boolean;
 }
 
 export function defaultConfig(): CliConfig {
@@ -63,6 +71,7 @@ export function defaultConfig(): CliConfig {
     providerType: "ollama",
     model: "qwen2.5-coder-7b-32k:latest",
     host: "http://localhost:11434",
+    embedModel: "nomic-embed-text",
     maxSteps: 25,
     maxContextTokens: 24576,
     logDir: join(homedir(), ".config", "ai-cli", "logs"),
@@ -125,7 +134,10 @@ export async function toAgentConfig(
     fewShot: conf.fewShot,
     projectContext: conf.projectContext,
     gitContext: conf.gitContext,
+    // Default ON for Ollama (native tools carry the schema), OFF otherwise unless set.
+    compactPrompt: conf.compactPrompt ?? (conf.providerType === "ollama"),
     compaction: conf.compaction ?? "structured",
     compactionThreshold: conf.compactionThreshold ?? 0.8,
+    embedModel: conf.embedModel ?? "nomic-embed-text",
   };
 }

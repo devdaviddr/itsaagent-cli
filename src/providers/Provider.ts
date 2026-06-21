@@ -18,4 +18,6 @@ export interface Provider {
   listModels(): Promise<ModelInfo[]>;
   /** True if the active model supports native tool calling. Optional — absent = no support. */
   supportsTools?(): Promise<boolean>;
+  /** Embed one or more texts into vectors. Optional — absent = no embedding support. */
+  embed?(texts: string[], model: string): Promise<number[][]>;
 }

@@ -9,6 +9,9 @@ interface OllamaToolCall {
 interface OllamaStreamChunk {
   message?: { content?: string; tool_calls?: OllamaToolCall[] };
   done: boolean;
+  /** Real token counts present on the final chunk: prompt and generated tokens. */
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 interface OllamaModel {
@@ -129,11 +132,29 @@ export class OllamaProvider implements Provider {
             const content = chunk.message?.content ?? "";
             if (chunk.done) {
               if (content) yield { delta: content, done: false };
-              yield { delta: "", done: true, toolCalls: toolCalls.length > 0 ? toolCalls : undefined };
+              yield {
+                delta: "",
+                done: true,
+                toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                tokenUsage: { prompt: chunk.prompt_eval_count ?? 0, completion: chunk.eval_count ?? 0 },
+              };
             } else if (content) {
               yield { delta: content, done: false };
             }
           } catch { /* skip malformed NDJSON lines */ }
+        }
+      }
+      // Flush the decoder and parse any bytes that remain in its internal buffer.
+      const tail = decoder.decode();
+      if (tail) {
+        buffer += tail;
+        const trimmed = buffer.trim();
+        if (trimmed) {
+          try {
+            const chunk = JSON.parse(trimmed) as OllamaStreamChunk;
+            const calls = normaliseToolCalls(chunk.message?.tool_calls);
+            if (calls.length > 0) toolCalls.push(...calls);
+          } catch { /* incomplete buffer — ignore */ }
         }
       }
     } finally {
@@ -155,6 +176,33 @@ export class OllamaProvider implements Provider {
     if (!res.ok) throw new ProviderError(`Failed to list models: ${res.status}`, res.status);
     const data = await res.json() as { models?: OllamaModel[] };
     return (data.models ?? []).map((m) => ({ name: m.name, size: m.size }));
+  }
+
+  /** Embed one or more texts into vectors via /api/embed. No streaming. */
+  async embed(texts: string[], model: string): Promise<number[][]> {
+    if (texts.length === 0) return [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/embed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, input: texts }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new ProviderError(`Ollama embed error (${res.status}): ${await res.text()}`, res.status);
+      }
+      const data = await res.json() as { embeddings?: number[][] };
+      return data.embeddings ?? [];
+    } catch (err: unknown) {
+      if (err instanceof ProviderError) throw err;
+      throw new ProviderError(
+        `Cannot reach Ollama at ${this.baseUrl}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /** Detect native tool-calling support via /api/show capabilities. */

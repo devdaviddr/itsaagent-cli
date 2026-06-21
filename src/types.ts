@@ -75,9 +75,13 @@ export interface AgentConfig {
   projectContext?: boolean;
   /** Inject git state (branch, changes, recent commits) into the prompt (default true). */
   gitContext?: boolean;
+  /** Compact tool descriptions in the prompt when native tools are active (saves prompt tokens). */
+  compactPrompt?: boolean;
   /** Context compaction mode + the window fraction that triggers it. */
   compaction?: import("./agent/compaction.js").CompactionMode;
   compactionThreshold?: number;
+  /** Local embedding model wired into the `search_code` tool (default nomic-embed-text). */
+  embedModel?: string;
   /** Restore a saved session (resume) instead of starting fresh. */
   restore?: import("./agent/Session.js").SerializedSession;
 }
@@ -92,6 +96,8 @@ export interface StreamChunk {
   done: boolean;
   /** Native function-calling output, present on the final chunk when the model calls a tool. */
   toolCalls?: ToolCall[];
+  /** Real token counts reported by the provider on the final chunk (when available). */
+  tokenUsage?: { prompt: number; completion: number };
 }
 
 /** OpenAI/Ollama function-calling tool schema. */

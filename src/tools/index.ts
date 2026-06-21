@@ -17,6 +17,7 @@ import { fetchTool } from "./fetch.js";
 import { askUserTool } from "./ask.js";
 import { runTestsTool } from "./verify.js";
 import { repoMapTool } from "./repoMap.js";
+import { searchCodeTool } from "./searchCode.js";
 
 export function getDefaultTools(): Tool[] {
   return [
@@ -38,6 +39,7 @@ export function getDefaultTools(): Tool[] {
     grepTool,
     runTestsTool,
     repoMapTool,
+    searchCodeTool,
   ];
 }
 
@@ -60,3 +62,4 @@ export { sshTool } from "./ssh.js";
 export { askUserTool } from "./ask.js";
 export { runTestsTool } from "./verify.js";
 export { repoMapTool } from "./repoMap.js";
+export { searchCodeTool, setEmbedder } from "./searchCode.js";

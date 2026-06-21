@@ -72,6 +72,21 @@ Every run writes a timestamped report to `tests/e2e/results/` (git-ignored):
 
 The paths are printed at the end of every run.
 
+### Feature coverage
+
+The Markdown report now groups scenarios by the **v0.4.0 capability** they
+exercise, in a `## Feature coverage` section printed just under the summary
+(and a `Feature` column in the per-scenario table). Each scenario carries a
+`feature` tag — `edit-reliability`, `verification`, `semantic-search`,
+`agent-safety`, or `core` — and the section prints a line per feature like
+`- **semantic-search:** 1/1 passing`. `pass` and `flaky` both count as passing;
+skipped scenarios are excluded from the denominator and surfaced as
+`(N skipped)`. Features are listed alphabetically with `core` last, and the tag
+is included per scenario in the JSON payload so tooling can group on it.
+
+`search-code` is gated on the embed model and will show as skipped until you
+pull it: `ollama pull nomic-embed-text`.
+
 ## Sandboxing
 
 Each scenario (each run) gets its own clean directory under the OS temp dir
@@ -87,6 +102,7 @@ cwd are pointed at it. Nothing ever touches your real home directory.
 | `file-creation` | Creates a file with the requested content (`write_file`). |
 | `folder-creation` | Creates a directory with a nested file. |
 | `edit-file` | Reads then edits an existing file (line-based `edit_file`), preserving other lines. |
+| `fuzzy-edit` | `edit_file` lands a change even when the model's `old_string` doesn't match the on-disk indentation verbatim (fuzzy/anchored matching). |
 | `append-file` | Appends to a file without losing existing content. |
 | `delete-file` | Deletes the named file and leaves others intact. |
 | `glob-search` | Finds files by pattern (`glob`). |
@@ -101,10 +117,12 @@ cwd are pointed at it. Nothing ever touches your real home directory.
 | `ask-user` | An ambiguous request makes the agent call `ask_user`; the supplied answer drives the result. |
 | `build-full-api` | The `build` agent codes a **complete** Express API (package.json + server + `/hello` route) in **one run** — no staggered stops. |
 | `build-complete-script` | Same completeness on a **non-web** task (a Node CLI with edge-case handling) — proves the behaviour is general, not API-specific. |
+| `general-completeness` | Answers **every part** of a multi-part non-code request (a numbered 3-part question) — completeness on the verification path beyond file/code tasks. |
 | `make-folder` | Creates an **empty folder** as a real directory (`make_directory`) — not a 0-byte file. |
 | `project-in-subfolder` | A project file lands **inside** the named subfolder (not the parent or home) — covers `make_directory` + the `bash cwd` fix. |
 | `fetch-url` | Fetches a URL with the `fetch` tool (**gated** on outbound network). |
 | `ssh-roundtrip` | Runs a command over SSH (**gated** on `IAA_E2E_SSH_HOST`, optionally `IAA_E2E_SSH_USER`). |
+| `search-code` | Builds an embedding index (`iaa index`) and uses the `search_code` tool to find code **by meaning** (**gated** on the embed model). |
 
 Gated scenarios **skip** (not fail) when their precondition is absent.
 

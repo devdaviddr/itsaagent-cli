@@ -5,7 +5,8 @@ import { getSessionCwd, resolveSessionPath } from "./session.js";
 
 const execFileAsync = promisify(execFile);
 
-const ALLOWED = new Set(["status", "diff", "log", "add", "commit", "branch", "checkout", "show", "stash"]);
+const ALLOWED = new Set(["status", "diff", "log", "add", "commit", "branch", "show"]);
+const BLOCKED = new Set(["checkout", "reset", "clean", "rebase", "merge", "push", "pull", "fetch", "cherry-pick", "revert", "stash"]);
 const MAX_OUTPUT = 6 * 1024;
 
 /** Split an argument string into argv, respecting single and double quotes. */
@@ -17,7 +18,8 @@ export function tokenizeArgs(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
     if (quote) {
-      if (ch === quote) quote = null;
+      if (ch === '\\' && i + 1 < input.length) { cur += input[++i]; }
+      else if (ch === quote) quote = null;
       else cur += ch;
     } else if (ch === '"' || ch === "'") {
       quote = ch;
@@ -37,11 +39,11 @@ export const gitTool: Tool = {
   definition: {
     name: "git",
     description:
-      "Run a safe git subcommand: status, diff, log, add, commit, branch, checkout, show, stash. Destructive operations are blocked. commit requires -m.",
+      "Run a safe git subcommand: status, diff, log, add, commit, branch, show. Destructive operations (checkout, reset, rebase, push, pull, merge, etc.) are blocked. commit requires -m.",
     parameters: {
       type: "object",
       properties: {
-        subcommand: { type: "string", description: "One of: status, diff, log, add, commit, branch, checkout, show, stash" },
+        subcommand: { type: "string", description: "One of: status, diff, log, add, commit, branch, show" },
         args: { type: "string", description: "Additional arguments, e.g. '-m \"fix: typo\"' or '--staged'" },
         cwd: { type: "string", description: "Working directory (defaults to current)" },
       },
@@ -54,7 +56,7 @@ export const gitTool: Tool = {
     // Honour the shared session cwd so `cd` (via bash) carries over to git, like a real terminal.
     const cwd = args.cwd ? resolveSessionPath(String(args.cwd)) : getSessionCwd();
 
-    if (!ALLOWED.has(subcommand)) {
+    if (BLOCKED.has(subcommand) || !ALLOWED.has(subcommand)) {
       return { success: false, data: "", error: "subcommand not permitted" };
     }
 

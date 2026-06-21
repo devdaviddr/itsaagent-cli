@@ -3,11 +3,13 @@ import { join, relative, extname, dirname } from "node:path";
 import type { Tool, ToolResult } from "../types.js";
 import { getSessionCwd, resolveSessionPath } from "./session.js";
 
-const IGNORE_DIRS = new Set([
+/** Directories never walked when scanning a repo. Shared with codeIndex.ts. */
+export const IGNORE_DIRS = new Set([
   "node_modules", ".git", "dist", "build", "out", ".next", "coverage", "vendor",
   "target", ".venv", "venv", "__pycache__", ".cache", ".turbo", ".idea", ".vscode",
 ]);
-const CODE_EXT = new Set([
+/** File extensions treated as source code. Shared with codeIndex.ts. */
+export const CODE_EXT = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java",
   ".rb", ".php", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".swift", ".kt", ".scala", ".sh",
 ]);
