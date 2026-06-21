@@ -574,7 +574,7 @@ export function App({ runtime, agents, resolveAgent, seedTask, providerOk, theme
         {isEmpty ? (
           <Banner theme={theme} />
         ) : (
-          <MessageLog lines={win.lines} theme={theme} rows={logRows} width={Math.max(20, width - 2)} scrolled={!conv.following} />
+          <MessageLog lines={win.lines} theme={theme} rows={logRows} width={Math.max(20, width - 2)} scrolled={!conv.following} generating={mode === "running" && conv.following && !pendingAsk} />
         )}
       </Box>
       {paletteOpen ? (
